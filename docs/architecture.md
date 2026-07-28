@@ -7,7 +7,7 @@
 - `packages/local-db`: Dexie schema, migration, repository và transaction.
 - `packages/qr`: payload `PKT1`, CRC-16, parse và render QR.
 - `packages/sync-engine`: outbox, changeset, snapshot, checksum, restore và conflict.
-- `packages/firebase`: auth, App Check, Storage adapter và emulator behavior.
+- `packages/firebase`: auth, App Check, Realtime Database blob adapter và emulator behavior.
 - `packages/ui`: primitive UI dùng chung.
 
 React không sở hữu phép tính tồn, doanh thu hay công nợ. Nghiệp vụ gọi transaction service, sau đó UI phản ứng với live query.
@@ -23,4 +23,4 @@ React không sở hữu phép tính tồn, doanh thu hay công nợ. Nghiệp v�
 
 ## Giới hạn nhất quán
 
-IndexedDB transaction đảm bảo atomic trên một thiết bị. Cloud Storage không phải transactional database; SỔ TAY không tuyên bố strong consistency đa thiết bị. Revision và device ID dùng để phát hiện divergent edits, giữ cả local/remote và chuyển Conflict Center.
+IndexedDB transaction đảm bảo atomic trên một thiết bị. Realtime Database chỉ chứa index metadata và blob base64 chia nhỏ, không sở hữu các bảng nghiệp vụ; SỔ TAY không tuyên bố strong consistency đa thiết bị. Revision và device ID dùng để phát hiện divergent edits, giữ cả local/remote và chuyển Conflict Center.

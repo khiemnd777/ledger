@@ -31,7 +31,7 @@ jobs:
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e
 
-  storage-rules:
+  database-rules:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

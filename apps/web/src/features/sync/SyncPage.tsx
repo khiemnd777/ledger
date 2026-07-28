@@ -1,4 +1,4 @@
-import { FirebaseCloudAdapter, getFirebaseClients } from "@pocket/firebase";
+import { getFirebaseClients, RealtimeDatabaseCloudAdapter } from "@pocket/firebase";
 import { db, getStorageStatus } from "@pocket/local-db";
 import { createSnapshotArchive, restoreSnapshotArchive, SyncEngine } from "@pocket/sync-engine";
 import { Badge, Button, Card } from "@pocket/ui";
@@ -57,7 +57,7 @@ export default function SyncPage() {
     try {
       const result = await new SyncEngine(
         db,
-        new FirebaseCloudAdapter(clients.storage),
+        new RealtimeDatabaseCloudAdapter(clients.database, user.uid),
         user.uid,
       ).sync(shopId);
       show(result.uploaded ? `Đã đồng bộ ${result.uploaded} thay đổi` : "Không có thay đổi mới");
@@ -140,8 +140,8 @@ export default function SyncPage() {
               </h2>
               <p>
                 {clients
-                  ? "Cloud Storage đã kết nối. SỔ TAY tự thử lại khi có mạng."
-                  : "Chưa kết nối Firebase Cloud Storage. Sao lưu thủ công vẫn hoạt động."}
+                  ? "Realtime Database Spark đã kết nối. SỔ TAY tự thử lại khi có mạng."
+                  : "Chưa kết nối Firebase Realtime Database. Sao lưu thủ công vẫn hoạt động."}
               </p>
               <small>Lần đồng bộ gần nhất: {formatDateTime(storage?.lastSuccessfulSync)}</small>
             </div>
@@ -271,10 +271,10 @@ export default function SyncPage() {
           </Card>
           <Card className="cloud-card">
             <Cloud />
-            <h3>Cloud Storage</h3>
+            <h3>Realtime Database</h3>
             <p>
               {clients
-                ? "Đã cấu hình Firebase"
+                ? "Gói Spark miễn phí · 1 GB lưu trữ · 10 GB tải xuống/tháng"
                 : "Cần thêm biến môi trường Firebase để đồng bộ nhiều thiết bị."}
             </p>
             <Badge tone={clients ? "success" : "neutral"}>

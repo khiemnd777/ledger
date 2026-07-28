@@ -1,0 +1,51 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "users": {
+      "$uid": {
+        "cloudFileIndex": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$fileId": {
+            ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || (data.exists() && !newData.exists()))",
+            ".validate": "$fileId.matches(/^[a-f0-9]{64}$/) && newData.hasChildren(['version', 'path', 'contentType', 'byteSize', 'chunkCount', 'checksum', 'updatedAt'])",
+            "version": {
+              ".validate": "newData.isNumber() && newData.val() === 1"
+            },
+            "path": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 1024 && newData.val().beginsWith('users/' + $uid + '/shops/')"
+            },
+            "contentType": {
+              ".validate": "newData.isString() && (newData.val() === 'application/gzip' || newData.val() === 'image/webp' || newData.val() === 'image/jpeg' || newData.val() === 'image/png' || newData.val() === 'image/svg+xml' || newData.val() === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')"
+            },
+            "byteSize": {
+              ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 8388608 && newData.val() % 1 === 0"
+            },
+            "chunkCount": {
+              ".validate": "newData.isNumber() && newData.val() > 0 && newData.val() <= 16 && newData.val() % 1 === 0"
+            },
+            "checksum": {
+              ".validate": "newData.isString() && newData.val().matches(/^[a-f0-9]{64}$/)"
+            },
+            "updatedAt": {
+              ".validate": "newData.isString() && newData.val().length >= 20 && newData.val().length <= 40"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "cloudFileBlobs": {
+          "$fileId": {
+            ".read": "auth != null && auth.uid === $uid",
+            ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || (data.exists() && !newData.exists()))",
+            ".validate": "$fileId.matches(/^[a-f0-9]{64}$/) && newData.hasChildren()",
+            "$chunk": {
+              ".validate": "$chunk.matches(/^(0|[1-9]|1[0-5])$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 700000"
+            }
+          }
+        }
+      }
+    }
+  }
+}

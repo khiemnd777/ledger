@@ -13,20 +13,18 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import {
-  connectStorageEmulator,
-  type FirebaseStorage,
-  getBytes,
-  getStorage,
-  listAll,
-  ref,
-  uploadBytes,
-  uploadBytesResumable,
-} from "firebase/storage";
+  connectDatabaseEmulator,
+  ref as databaseRef,
+  type Database as FirebaseDatabase,
+  get,
+  getDatabase,
+  update,
+} from "firebase/database";
 
 export interface FirebaseClients {
   app: FirebaseApp;
   auth: Auth;
-  storage: FirebaseStorage;
+  database: FirebaseDatabase;
 }
 
 let cached: FirebaseClients | undefined;
@@ -35,7 +33,8 @@ export function hasFirebaseConfig(): boolean {
   return Boolean(
     import.meta.env.VITE_FIREBASE_API_KEY &&
       import.meta.env.VITE_FIREBASE_PROJECT_ID &&
-      import.meta.env.VITE_FIREBASE_APP_ID,
+      import.meta.env.VITE_FIREBASE_APP_ID &&
+      import.meta.env.VITE_FIREBASE_DATABASE_URL,
   );
 }
 
@@ -47,17 +46,17 @@ export function getFirebaseClients(): FirebaseClients | undefined {
     initializeApp({
       apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
       authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
       projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
       appId: import.meta.env.VITE_FIREBASE_APP_ID,
       messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     });
   const auth = getAuth(app);
-  const storage = getStorage(app);
+  const database = getDatabase(app);
   if (import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATORS === "true") {
     try {
       connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-      connectStorageEmulator(storage, "127.0.0.1", 9199);
+      connectDatabaseEmulator(database, "127.0.0.1", 9000);
     } catch {
       // Firebase only permits emulator connection once during initialization.
     }
@@ -67,7 +66,7 @@ export function getFirebaseClients(): FirebaseClients | undefined {
       isTokenAutoRefreshEnabled: true,
     });
   }
-  cached = { app, auth, storage };
+  cached = { app, auth, database };
   return cached;
 }
 
@@ -98,20 +97,167 @@ export const authApi = {
   },
 };
 
-export class FirebaseCloudAdapter implements CloudFileAdapter {
-  constructor(private readonly storage: FirebaseStorage) {}
-  async upload(path: string, data: Uint8Array, contentType: string) {
-    await uploadBytes(ref(this.storage, path), data, {
+const CLOUD_CHUNK_BYTES = 512 * 1024;
+export const MAX_CLOUD_FILE_BYTES = 8 * 1024 * 1024;
+
+interface CloudFileMetadata {
+  version: 1;
+  path: string;
+  contentType: string;
+  byteSize: number;
+  chunkCount: number;
+  checksum: string;
+  updatedAt: string;
+}
+
+async function sha256(value: Uint8Array | string): Promise<string> {
+  const bytes = typeof value === "string" ? new TextEncoder().encode(value) : value;
+  const checksum = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
+  return [...new Uint8Array(checksum)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function fromBase64(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+export function encodeCloudChunks(data: Uint8Array): Record<string, string> {
+  const chunks: Record<string, string> = {};
+  for (
+    let offset = 0, index = 0;
+    offset < data.byteLength;
+    offset += CLOUD_CHUNK_BYTES, index += 1
+  ) {
+    chunks[String(index)] = toBase64(data.subarray(offset, offset + CLOUD_CHUNK_BYTES));
+  }
+  return chunks;
+}
+
+export function decodeCloudChunks(chunks: Record<string, string>, chunkCount: number): Uint8Array {
+  const decoded: Uint8Array[] = [];
+  let byteSize = 0;
+  for (let index = 0; index < chunkCount; index += 1) {
+    const value = chunks[String(index)];
+    if (typeof value !== "string") throw new Error("Gói cloud thiếu dữ liệu.");
+    const bytes = fromBase64(value);
+    decoded.push(bytes);
+    byteSize += bytes.byteLength;
+  }
+  const result = new Uint8Array(byteSize);
+  let offset = 0;
+  for (const bytes of decoded) {
+    result.set(bytes, offset);
+    offset += bytes.byteLength;
+  }
+  return result;
+}
+
+function isCloudFileMetadata(value: unknown): value is CloudFileMetadata {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<CloudFileMetadata>;
+  return (
+    candidate.version === 1 &&
+    typeof candidate.path === "string" &&
+    typeof candidate.contentType === "string" &&
+    typeof candidate.byteSize === "number" &&
+    typeof candidate.chunkCount === "number" &&
+    typeof candidate.checksum === "string" &&
+    typeof candidate.updatedAt === "string"
+  );
+}
+
+export class RealtimeDatabaseCloudAdapter implements CloudFileAdapter {
+  constructor(
+    private readonly database: FirebaseDatabase,
+    private readonly ownerUid: string,
+  ) {}
+
+  private assertOwnedPath(path: string): void {
+    if (!path.startsWith(`users/${this.ownerUid}/shops/`)) {
+      throw new Error("Đường dẫn cloud không thuộc tài khoản hiện tại.");
+    }
+  }
+
+  private async fileId(path: string): Promise<string> {
+    this.assertOwnedPath(path);
+    return sha256(path);
+  }
+
+  async upload(path: string, data: Uint8Array, contentType: string): Promise<void> {
+    if (data.byteLength === 0) throw new Error("Không thể tải tệp rỗng lên cloud.");
+    if (data.byteLength > MAX_CLOUD_FILE_BYTES) {
+      throw new Error("Tệp cloud vượt giới hạn 8 MB của gói miễn phí.");
+    }
+    const [fileId, checksum] = await Promise.all([this.fileId(path), sha256(data)]);
+    const indexPath = `users/${this.ownerUid}/cloudFileIndex/${fileId}`;
+    const existingSnapshot = await get(databaseRef(this.database, indexPath));
+    if (existingSnapshot.exists()) {
+      const existing = existingSnapshot.val() as unknown;
+      if (
+        isCloudFileMetadata(existing) &&
+        existing.path === path &&
+        existing.checksum === checksum &&
+        existing.byteSize === data.byteLength
+      ) {
+        return;
+      }
+      throw new Error("Đường dẫn cloud đã chứa một tệp khác.");
+    }
+    const chunks = encodeCloudChunks(data);
+    const metadata: CloudFileMetadata = {
+      version: 1,
+      path,
       contentType,
-      cacheControl: "private,max-age=31536000,immutable",
+      byteSize: data.byteLength,
+      chunkCount: Object.keys(chunks).length,
+      checksum,
+      updatedAt: new Date().toISOString(),
+    };
+    await update(databaseRef(this.database), {
+      [`users/${this.ownerUid}/cloudFileBlobs/${fileId}`]: chunks,
+      [indexPath]: metadata,
     });
   }
-  async download(path: string) {
-    return new Uint8Array(await getBytes(ref(this.storage, path), 50 * 1024 * 1024));
+
+  async download(path: string): Promise<Uint8Array> {
+    const fileId = await this.fileId(path);
+    const [metadataSnapshot, chunksSnapshot] = await Promise.all([
+      get(databaseRef(this.database, `users/${this.ownerUid}/cloudFileIndex/${fileId}`)),
+      get(databaseRef(this.database, `users/${this.ownerUid}/cloudFileBlobs/${fileId}`)),
+    ]);
+    const metadata = metadataSnapshot.val() as unknown;
+    if (!isCloudFileMetadata(metadata) || metadata.path !== path || !chunksSnapshot.exists()) {
+      throw new Error("Không tìm thấy tệp cloud.");
+    }
+    const data = decodeCloudChunks(
+      chunksSnapshot.val() as Record<string, string>,
+      metadata.chunkCount,
+    );
+    if (data.byteLength !== metadata.byteSize || (await sha256(data)) !== metadata.checksum) {
+      throw new Error("Tệp cloud không vượt qua kiểm tra toàn vẹn.");
+    }
+    return data;
   }
-  async list(prefix: string) {
-    const result = await listAll(ref(this.storage, prefix));
-    return result.items.map((item) => ({ path: item.fullPath }));
+
+  async list(prefix: string): Promise<Array<{ path: string; updatedAt?: string }>> {
+    this.assertOwnedPath(prefix);
+    const snapshot = await get(databaseRef(this.database, `users/${this.ownerUid}/cloudFileIndex`));
+    const values = snapshot.val() as Record<string, unknown> | null;
+    return Object.values(values ?? {})
+      .filter(isCloudFileMetadata)
+      .filter((item) => item.path.startsWith(prefix))
+      .map((item) => ({ path: item.path, updatedAt: item.updatedAt }))
+      .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
   }
 }
 
@@ -153,26 +299,18 @@ export async function uploadProductImage(input: {
   onProgress?: (percent: number) => void;
 }) {
   const clients = getFirebaseClients();
-  if (!clients) throw new Error("Firebase Storage chưa được cấu hình.");
+  if (!clients) throw new Error("Firebase Realtime Database chưa được cấu hình.");
   const prepared = await prepareImage(input.file);
+  if (prepared.blob.size > MAX_CLOUD_FILE_BYTES) {
+    throw new Error("Ảnh sau khi nén vẫn vượt giới hạn cloud 8 MB.");
+  }
   const path = `users/${input.ownerUid}/shops/${input.shopId}/product-images/${input.productId}/${prepared.hash}.webp`;
-  const task = uploadBytesResumable(ref(clients.storage, path), prepared.blob, {
-    contentType: "image/webp",
-    cacheControl: "private,max-age=31536000,immutable",
-    customMetadata: {
-      contentHash: prepared.hash,
-      width: String(prepared.width),
-      height: String(prepared.height),
-    },
-  });
-  await new Promise<void>((resolve, reject) => {
-    task.on(
-      "state_changed",
-      (snapshot) =>
-        input.onProgress?.(Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)),
-      reject,
-      resolve,
-    );
-  });
+  input.onProgress?.(30);
+  await new RealtimeDatabaseCloudAdapter(clients.database, input.ownerUid).upload(
+    path,
+    new Uint8Array(await prepared.blob.arrayBuffer()),
+    "image/webp",
+  );
+  input.onProgress?.(100);
   return { path, hash: prepared.hash };
 }

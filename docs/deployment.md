@@ -2,7 +2,7 @@
 
 ## Firebase project
 
-Tạo Web App, bật Email/Password + Google Auth, Cloud Storage, Hosting và App Check reCAPTCHA v3. Điền `.env.local` từ `.env.example`. Firebase Web config có thể nằm trong frontend; service credentials thì không.
+Tạo Web App, bật Email/Password + Google Auth, Realtime Database ở `asia-southeast1`, Hosting và App Check reCAPTCHA v3. Điền `.env.local` từ `.env.example`, gồm `VITE_FIREBASE_DATABASE_URL`. Không tạo Cloud Storage bucket và không cần gắn billing. Firebase Web config có thể nằm trong frontend; service credentials thì không.
 
 ## Validation
 
@@ -20,7 +20,7 @@ Rules tests cần emulator/Java. Playwright cần Chromium (`bunx playwright ins
 
 ```bash
 firebase --config firebase.json use your-project-id
-firebase --config firebase.json deploy --only storage
+firebase --config firebase.json deploy --only database
 bun run build
 firebase --config firebase.json deploy --only hosting
 ```

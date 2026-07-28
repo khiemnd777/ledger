@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:rules": "firebase --config firebase.json emulators:exec --only storage 'bunx vitest run --config vitest.rules.config.ts'",
+    "test:rules": "firebase --config firebase.json emulators:exec --only database 'bunx vitest run --config vitest.rules.config.ts'",
     "prepare": "lefthook install"
   },
   "devDependencies": {

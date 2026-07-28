@@ -2,7 +2,7 @@
 
 **Quản lý bán áo bằng QR ngay trên điện thoại.**
 
-SỔ TAY là PWA mobile-first cho shop thời trang nhỏ: quản lý mẫu áo và biến thể, in/quét QR, bán hàng, nhập áo, đổi trả, công nợ, chi phí và báo cáo. Ứng dụng làm việc trên IndexedDB khi offline và đồng bộ các changeset bất biến lên Firebase Cloud Storage khi có mạng.
+SỔ TAY là PWA mobile-first cho shop thời trang nhỏ: quản lý mẫu áo và biến thể, in/quét QR, bán hàng, nhập áo, đổi trả, công nợ, chi phí và báo cáo. Ứng dụng làm việc trên IndexedDB khi offline và đồng bộ các changeset bất biến lên Firebase Realtime Database khi có mạng.
 
 ## Kiến trúc
 
@@ -10,8 +10,8 @@ SỔ TAY là PWA mobile-first cho shop thời trang nhỏ: quản lý mẫu áo 
 - Dexie/IndexedDB là cơ sở dữ liệu làm việc và nguồn cho báo cáo offline
 - Mọi nghiệp vụ quan trọng chạy trong một Dexie transaction
 - Firebase Authentication xác thực người dùng
-- Firebase Cloud Storage lưu changeset, snapshot, ảnh, tem và file xuất; không được dùng như query database
-- Firebase Hosting phục vụ static PWA; không có backend, API route, Firestore hay Cloud Functions
+- Firebase Realtime Database Spark lưu blob chia nhỏ của changeset, snapshot và ảnh; không được dùng để query nghiệp vụ
+- Firebase Hosting phục vụ static PWA; không có custom backend, API route, Firestore, Cloud Storage hay Cloud Functions
 - Outbox local-first, snapshot có SHA-256 checksum, gzip bằng fflate
 
 Xem [kiến trúc](docs/architecture.md), [mô hình dữ liệu](docs/data-model.md) và [giao thức đồng bộ](docs/sync-protocol.md).
@@ -37,7 +37,7 @@ Nếu chưa cấu hình Firebase, ứng dụng hiện rõ **chế độ phát tr
 
 1. Tạo Firebase project và Web App.
 2. Bật Authentication providers: Email/Password và Google.
-3. Tạo Cloud Storage bucket và Hosting site.
+3. Tạo Realtime Database ở `asia-southeast1` và Hosting site; không cần bật billing hay Cloud Storage.
 4. Copy `.env.example` thành `.env.local`, điền các giá trị `VITE_FIREBASE_*`.
 5. Với production, tạo reCAPTCHA v3 site key và điền `VITE_FIREBASE_APP_CHECK_SITE_KEY`.
 6. Copy `.firebaserc.example` thành `.firebaserc`, thay project ID.
@@ -48,7 +48,7 @@ Firebase Web config là cấu hình công khai, không phải service credential
 ### Emulator
 
 ```bash
-firebase --config firebase.json emulators:start --only auth,storage
+firebase --config firebase.json emulators:start --only auth,database
 bun run dev
 ```
 
@@ -65,16 +65,16 @@ bun run test:rules
 bun run build
 ```
 
-Unit tests bao phủ QR/checksum, tiền, giá vốn bình quân, báo cáo, conflict, changeset và rollback transaction bán hàng. Playwright dùng camera-denial/manual fallback; Rules tests cần Storage emulator.
+Unit tests bao phủ QR/checksum, tiền, giá vốn bình quân, báo cáo, conflict, changeset, cloud chunks và rollback transaction bán hàng. Playwright dùng camera-denial/manual fallback; Rules tests cần Realtime Database emulator.
 
 ## Build và deploy
 
 ```bash
 bun run build
-firebase --config firebase.json deploy --only hosting,storage
+firebase --config firebase.json deploy --only hosting,database
 ```
 
-Output production ở `apps/web/dist`. GitHub Actions có validation cho pull request và deploy main bằng protected secrets.
+Output production ở `apps/web/dist`. GitHub Actions tự validation khi push; workflow deploy production chỉ chạy thủ công sau khi environment có protected credential.
 
 ## Sao lưu và khôi phục
 
@@ -82,14 +82,16 @@ Mở **Khác → Đồng bộ & Sao lưu**. Bản sao tải về chứa tất c�
 
 ## Bảo mật
 
-- Storage Rules bắt buộc auth và cô lập tuyệt đối dưới `users/{uid}`.
-- Upload bị giới hạn MIME, kích thước và đường dẫn; executable bị từ chối mặc định.
+- Realtime Database Rules bắt buộc auth và cô lập tuyệt đối dưới `users/{uid}`.
+- Blob được chia thành chunk 512 KiB, giới hạn 8 MB/tệp, MIME allowlist, checksum SHA-256 và bất biến sau khi tạo.
 - QR chỉ là định danh có checksum, không phải authorization token và không chứa giá vốn, tồn hay UID.
 - Tiền lưu bằng integer VND; giá vốn lịch sử nằm trên từng sale line.
 - Completed sale không bị xóa; hủy/đổi/trả phải tạo stock movements đảo chiều.
 
 ## Giới hạn đã biết
 
-SỔ TAY hỗ trợ nhiều người dùng độc lập và một người có nhiều shop. Kiến trúc không backend và không server database **không cung cấp cộng tác giao dịch thời gian thực cho nhiều nhân viên trong cùng một shop**. Đồng bộ đa thiết bị là best-effort: khi phát hiện hai phiên bản, ứng dụng giữ cả hai và yêu cầu giải quyết trong Conflict Center.
+SỔ TAY hỗ trợ nhiều người dùng độc lập và một người có nhiều shop. Realtime Database chỉ là kho blob truyền tải, vì vậy kiến trúc này **không cung cấp cộng tác giao dịch thời gian thực cho nhiều nhân viên trong cùng một shop**. Đồng bộ đa thiết bị là best-effort: khi phát hiện hai phiên bản, ứng dụng giữ cả hai và yêu cầu giải quyết trong Conflict Center.
+
+Gói Spark không cần billing, gồm 1 GB dữ liệu lưu và 10 GB tải xuống mỗi tháng. Đây là free tier có quota, không phải dung lượng không giới hạn; khi hết quota, cloud sync dừng thay vì tự phát sinh phí.
 
 Camera, đèn pin, background sync và persistent storage phụ thuộc trình duyệt. SỔ TAY luôn cung cấp nhập SKU, ảnh QR, outbox và nút thử lại thay vì phụ thuộc riêng vào các API đó.

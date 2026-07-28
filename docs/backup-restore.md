@@ -1,6 +1,6 @@
 # Backup và restore
 
-Manual backup lấy snapshot nhất quán từ IndexedDB, JSON serialize, checksum SHA-256 phần core và gzip. File có tên shop + ngày. Cloud snapshot dùng cùng envelope và immutable path theo năm/tháng.
+Manual backup lấy snapshot nhất quán từ IndexedDB, JSON serialize, checksum SHA-256 phần core và gzip. File có tên shop + ngày. Cloud snapshot dùng cùng envelope và immutable path theo năm/tháng, sau đó được chia thành các blob 512 KiB trong Realtime Database.
 
 Restore:
 

@@ -1,4 +1,4 @@
-import { FirebaseCloudAdapter, getFirebaseClients } from "@pocket/firebase";
+import { getFirebaseClients, RealtimeDatabaseCloudAdapter } from "@pocket/firebase";
 import { db } from "@pocket/local-db";
 import { SyncEngine } from "@pocket/sync-engine";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -55,7 +55,7 @@ export default function AppShell() {
   const syncEngine = useMemo(() => {
     const clients = getFirebaseClients();
     return clients && user
-      ? new SyncEngine(db, new FirebaseCloudAdapter(clients.storage), user.uid)
+      ? new SyncEngine(db, new RealtimeDatabaseCloudAdapter(clients.database, user.uid), user.uid)
       : undefined;
   }, [user?.uid]);
   useEffect(() => {
