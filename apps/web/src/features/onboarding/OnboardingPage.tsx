@@ -65,7 +65,7 @@ export default function OnboardingPage() {
     <div className="onboarding-page">
       <header>
         <div className="auth-brand auth-brand--dark">
-          <span>PO</span>
+          <span>ST</span>
           <strong>SỔ TAY</strong>
         </div>
         <p>

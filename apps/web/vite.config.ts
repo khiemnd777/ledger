@@ -5,6 +5,7 @@ import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  envDir: "../../",
   plugins: [
     react(),
     tailwindcss(),
@@ -43,7 +44,7 @@ export default defineConfig({
             urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//,
             handler: "CacheFirst",
             options: {
-              cacheName: "pocket-fonts",
+              cacheName: "so-tay-fonts",
               expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },

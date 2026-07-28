@@ -55,7 +55,7 @@ export default function AuthPage() {
     <div className="auth-page">
       <section className="auth-hero">
         <div className="auth-brand">
-          <span>PO</span>
+          <span>ST</span>
           <strong>SỔ TAY</strong>
         </div>
         <div>

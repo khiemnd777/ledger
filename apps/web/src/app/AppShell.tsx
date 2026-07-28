@@ -80,7 +80,7 @@ export default function AppShell() {
     <div className={`app-shell ${scannerOpen ? "app-shell--scanner" : ""}`}>
       <aside className="sidebar">
         <NavLink to="/" className="brand" aria-label="SỔ TAY">
-          <span>PO</span>
+          <span>ST</span>
           <strong>SỔ TAY</strong>
         </NavLink>
         <p className="sidebar__shop">{activeShop?.name}</p>

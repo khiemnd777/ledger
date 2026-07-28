@@ -32,7 +32,7 @@ function Guard({ children }: { children: React.ReactNode }) {
   if (loading || (user && shopLoading))
     return (
       <div className="splash">
-        <div className="splash__logo">PO</div>
+        <div className="splash__logo">ST</div>
         <p>Đang mở SỔ TAY…</p>
       </div>
     );
