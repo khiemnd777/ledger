@@ -40,7 +40,7 @@ Nếu chưa cấu hình Firebase, ứng dụng hiện rõ **chế độ phát tr
 3. Tạo Cloud Storage bucket và Hosting site.
 4. Copy `.env.example` thành `.env.local`, điền các giá trị `VITE_FIREBASE_*`.
 5. Với production, tạo reCAPTCHA v3 site key và điền `VITE_FIREBASE_APP_CHECK_SITE_KEY`.
-6. Copy `firebase/.firebaserc.example` thành `firebase/.firebaserc`, thay project ID.
+6. Copy `.firebaserc.example` thành `.firebaserc`, thay project ID.
 7. Deploy rules trước khi cho người dùng upload.
 
 Firebase Web config là cấu hình công khai, không phải service credential. Không đưa service-account JSON hoặc CI token vào repository.
@@ -48,7 +48,7 @@ Firebase Web config là cấu hình công khai, không phải service credential
 ### Emulator
 
 ```bash
-firebase --config firebase/firebase.json emulators:start --only auth,storage
+firebase --config firebase.json emulators:start --only auth,storage
 bun run dev
 ```
 
@@ -71,7 +71,7 @@ Unit tests bao phủ QR/checksum, tiền, giá vốn bình quân, báo cáo, con
 
 ```bash
 bun run build
-firebase --config firebase/firebase.json deploy --only hosting,storage
+firebase --config firebase.json deploy --only hosting,storage
 ```
 
 Output production ở `apps/web/dist`. GitHub Actions có validation cho pull request và deploy main bằng protected secrets.

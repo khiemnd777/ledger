@@ -19,10 +19,10 @@ Rules tests cần emulator/Java. Playwright cần Chromium (`bunx playwright ins
 ## Deploy
 
 ```bash
-firebase --config firebase/firebase.json use your-project-id
-firebase --config firebase/firebase.json deploy --only storage
+firebase --config firebase.json use your-project-id
+firebase --config firebase.json deploy --only storage
 bun run build
-firebase --config firebase/firebase.json deploy --only hosting
+firebase --config firebase.json deploy --only hosting
 ```
 
 Hosting rewrite đưa mọi route về `index.html`. Hashed assets cache immutable; HTML no-cache để service worker update an toàn.

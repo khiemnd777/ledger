@@ -34,4 +34,4 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SO_TAY }}
-      - run: bunx firebase-tools deploy --project "${{ vars.VITE_FIREBASE_PROJECT_ID }}" --config firebase/firebase.json --only hosting,storage
+      - run: bunx firebase-tools deploy --project "${{ vars.VITE_FIREBASE_PROJECT_ID }}" --config firebase.json --only hosting,storage

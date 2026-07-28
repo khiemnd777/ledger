@@ -1,5 +1,5 @@
 {
-  "storage": { "rules": "storage.rules" },
+  "storage": { "rules": "firebase/storage.rules" },
   "emulators": {
     "auth": { "port": 9099 },
     "storage": { "port": 9199 },
@@ -7,7 +7,7 @@
     "singleProjectMode": true
   },
   "hosting": {
-    "public": "../apps/web/dist",
+    "public": "apps/web/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
     "headers": [
