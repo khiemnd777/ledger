@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      run: bunx biome check {staged_files}
+    typecheck:
+      run: bun run typecheck

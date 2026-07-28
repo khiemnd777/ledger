@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@pocket/domain": ["../../packages/domain/src/index.ts"],
+      "@pocket/local-db": ["../../packages/local-db/src/index.ts"],
+      "@pocket/qr": ["../../packages/qr/src/index.ts"],
+      "@pocket/sync-engine": ["../../packages/sync-engine/src/index.ts"],
+      "@pocket/firebase": ["../../packages/firebase/src/index.ts"],
+      "@pocket/ui": ["../../packages/ui/src/index.tsx"]
+    },
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client", "vite-plugin-pwa/client", "node"]
+  },
+  "include": ["src", "../../packages/**/*.ts", "../../packages/**/*.tsx", "vite.config.ts"]
+}
