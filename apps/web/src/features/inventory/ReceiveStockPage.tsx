@@ -24,9 +24,21 @@ export default function ReceiveStockPage() {
   const [error, setError] = useState("");
   const data = useLiveQuery(
     async () => ({
-      products: await db.products.where("shopId").equals(shopId).toArray(),
-      variants: await db.variants.where("shopId").equals(shopId).toArray(),
-      suppliers: await db.suppliers.where("shopId").equals(shopId).toArray(),
+      products: await db.products
+        .where("shopId")
+        .equals(shopId)
+        .filter((item) => item.active)
+        .toArray(),
+      variants: await db.variants
+        .where("shopId")
+        .equals(shopId)
+        .filter((item) => item.active)
+        .toArray(),
+      suppliers: await db.suppliers
+        .where("shopId")
+        .equals(shopId)
+        .filter((item) => item.active)
+        .toArray(),
     }),
     [shopId],
     { products: [], variants: [], suppliers: [] },

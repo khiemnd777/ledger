@@ -437,7 +437,9 @@ export function calculateReport({ sales, saleLines, expenses, returns }: ReportI
     0,
   );
   const grossProfit = netRevenue - costOfGoodsSold;
-  const expenseTotal = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const expenseTotal = expenses
+    .filter((expense) => !expense.deletedAt)
+    .reduce((sum, expense) => sum + expense.amount, 0);
   return {
     netRevenue,
     costOfGoodsSold,

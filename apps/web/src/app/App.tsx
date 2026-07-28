@@ -17,6 +17,7 @@ const ProductFormPage = lazy(() => import("../features/products/ProductFormPage"
 const QrLabelsPage = lazy(() => import("../features/products/QrLabelsPage"));
 const InventoryPage = lazy(() => import("../features/inventory/InventoryPage"));
 const ReceiveStockPage = lazy(() => import("../features/inventory/ReceiveStockPage"));
+const PurchasesPage = lazy(() => import("../features/inventory/PurchasesPage"));
 const ReturnsPage = lazy(() => import("../features/returns/ReturnsPage"));
 const ContactsPage = lazy(() => import("../features/contacts/ContactsPage"));
 const ExpensesPage = lazy(() => import("../features/reports/ExpensesPage"));
@@ -84,6 +85,8 @@ export default function App() {
           <Route path="qr-labels" element={<QrLabelsPage />} />
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="receive" element={<ReceiveStockPage />} />
+          <Route path="purchases" element={<PurchasesPage />} />
+          <Route path="purchases/:purchaseId" element={<PurchasesPage />} />
           <Route path="returns" element={<ReturnsPage />} />
           <Route path="customers" element={<ContactsPage type="customer" />} />
           <Route path="suppliers" element={<ContactsPage type="supplier" />} />

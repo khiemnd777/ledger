@@ -1,11 +1,11 @@
-import type { Sale } from "@pocket/domain";
-import { cancelCompletedSale, db, getDeviceId } from "@pocket/local-db";
+import type { DeliveryStatus, Sale } from "@pocket/domain";
+import { cancelCompletedSale, db, getDeviceId, updateSaleDetails } from "@pocket/local-db";
 import { Badge, Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ChevronRight, PackageOpen, ShoppingBag } from "lucide-react";
+import { ChevronRight, PackageOpen, Pencil, ShoppingBag, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { formatDateTime, formatMoney } from "../../app/format";
+import { formatDateTime, formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
 import { useToast } from "../../components/Toast";
 import { PageHeader, SearchField } from "../../components/Ui";
@@ -24,6 +24,10 @@ export default function OrdersPage() {
   const { saleId } = useParams();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [editing, setEditing] = useState(false);
+  const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>("not_required");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
   const sales =
     useLiveQuery<Sale[]>(
       () =>
@@ -44,6 +48,22 @@ export default function OrdersPage() {
     [saleId],
   );
   const detailSale = detail?.sale;
+  async function saveDetails() {
+    if (!activeShop || !detailSale) return;
+    try {
+      await updateSaleDetails({
+        shopId: activeShop.id,
+        deviceId: getDeviceId(),
+        saleId: detailSale.id,
+        deliveryStatus,
+        note,
+      });
+      show("Đã cập nhật giao hàng và ghi chú");
+      setEditing(false);
+    } catch (cause) {
+      setError(toVietnameseError(cause));
+    }
+  }
   if (saleId && detailSale)
     return (
       <div>
@@ -121,6 +141,19 @@ export default function OrdersPage() {
                 <dd>{detailSale.note || "—"}</dd>
               </div>
             </dl>
+            {detailSale.status !== "cancelled" && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setDeliveryStatus(detailSale.deliveryStatus);
+                  setNote(detailSale.note ?? "");
+                  setError("");
+                  setEditing(true);
+                }}
+              >
+                <Pencil /> Sửa giao hàng & ghi chú
+              </Button>
+            )}
             {["completed", "partially_returned"].includes(detailSale.status) && (
               <Link className="button button--secondary" to={`/returns?sale=${detailSale.id}`}>
                 Đổi / Trả áo
@@ -144,6 +177,49 @@ export default function OrdersPage() {
             )}
           </Card>
         </div>
+        {editing && (
+          <div className="sheet-backdrop">
+            <div className="bottom-sheet">
+              <button
+                type="button"
+                className="sheet-close"
+                aria-label="Đóng"
+                onClick={() => setEditing(false)}
+              >
+                <X />
+              </button>
+              <h2>Sửa thông tin đơn</h2>
+              <p>Số tiền và sản phẩm đã chốt không thay đổi; hủy đơn sẽ tạo phát sinh đảo.</p>
+              <div className="form-card">
+                <label>
+                  Trạng thái giao hàng
+                  <select
+                    value={deliveryStatus}
+                    onChange={(event) => setDeliveryStatus(event.target.value as DeliveryStatus)}
+                  >
+                    <option value="not_required">Không cần giao</option>
+                    <option value="pending_confirmation">Chờ xác nhận</option>
+                    <option value="packing">Đang đóng gói</option>
+                    <option value="shipping">Đang giao</option>
+                    <option value="delivered">Đã giao</option>
+                    <option value="failed">Giao thất bại</option>
+                    <option value="returned">Đã hoàn về</option>
+                  </select>
+                </label>
+                <label>
+                  Ghi chú
+                  <textarea
+                    rows={3}
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                  />
+                </label>
+              </div>
+              {error && <p className="form-error">{error}</p>}
+              <Button onClick={saveDetails}>Lưu thay đổi</Button>
+            </div>
+          </div>
+        )}
       </div>
     );
   const filtered = sales.filter(

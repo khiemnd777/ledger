@@ -1,11 +1,13 @@
 import {
   type AuditLog,
+  assertIntegerMoney,
   type CompleteSaleInput,
   type ConflictRecord,
   type Customer,
   calculateSaleTotals,
   createId,
   createMeta,
+  type DeliveryStatus,
   type EntityMeta,
   type Expense,
   InsufficientStockError,
@@ -123,13 +125,14 @@ function makeOutbox(
   meta: EntityMeta,
   entityType: OutboxEvent["entityType"],
   payload: unknown,
+  action?: OutboxEvent["action"],
 ): OutboxEvent {
   return {
     ...createMeta(meta.shopId, meta.updatedByDeviceId),
     deviceId: meta.updatedByDeviceId,
     entityType,
     entityId: meta.id,
-    action: meta.revision === 1 ? "create" : "update",
+    action: action ?? (meta.deletedAt ? "delete" : meta.revision === 1 ? "create" : "update"),
     entityRevision: meta.revision,
     payload,
     occurredAt: nowIso(),
@@ -183,6 +186,7 @@ export async function createShop(input: {
 }
 
 export interface CreateProductInput {
+  id?: string;
   shopId: string;
   deviceId: string;
   name: string;
@@ -192,16 +196,42 @@ export interface CreateProductInput {
   purchasePrice: number;
   openingStock: number;
   lowStockThreshold: number;
+  imageIds?: string[];
   attributes: Array<{ name: string; values: Array<{ value: string; colorHex?: string }> }>;
 }
 
 export async function createProductWithVariants(input: CreateProductInput) {
+  if (!input.name.trim() || !input.productCode.trim())
+    throw new PocketError(
+      "PRODUCT_REQUIRED",
+      "Tên và mã mẫu áo không được để trống.",
+      "Nhập đủ tên và mã mẫu áo.",
+    );
+  for (const [field, value] of [
+    ["salePrice", input.salePrice],
+    ["purchasePrice", input.purchasePrice],
+    ["openingStock", input.openingStock],
+    ["lowStockThreshold", input.lowStockThreshold],
+  ] as const)
+    assertIntegerMoney(value, field);
+  const productCode = input.productCode.trim().toUpperCase();
+  const duplicate = await db.products
+    .where("shopId")
+    .equals(input.shopId)
+    .filter((item) => item.productCode === productCode)
+    .first();
+  if (duplicate)
+    throw new PocketError(
+      "PRODUCT_CODE_EXISTS",
+      `Mã mẫu ${productCode} đã tồn tại.`,
+      "Dùng mã mẫu khác.",
+    );
   const product: Product = {
-    ...createMeta(input.shopId, input.deviceId),
+    ...createMeta(input.shopId, input.deviceId, input.id),
     name: input.name.trim(),
-    productCode: input.productCode.trim().toUpperCase(),
-    material: input.material,
-    imageIds: [],
+    productCode,
+    material: input.material?.trim() || undefined,
+    imageIds: input.imageIds ?? [],
     trackInventory: true,
     hasVariants: input.attributes.length > 0,
     active: true,
@@ -299,6 +329,138 @@ export async function createProductWithVariants(input: CreateProductInput) {
   return { product, attributes, values, variants };
 }
 
+export interface UpdateProductInput {
+  shopId: string;
+  deviceId: string;
+  productId: string;
+  name: string;
+  productCode: string;
+  material?: string;
+  description?: string;
+  imageIds?: string[];
+  variants: Array<{
+    id: string;
+    salePrice: number;
+    purchasePrice: number;
+    lowStockThreshold: number;
+    active: boolean;
+  }>;
+}
+
+export async function updateProduct(input: UpdateProductInput) {
+  const name = input.name.trim();
+  const productCode = input.productCode.trim().toUpperCase();
+  if (!name || !productCode)
+    throw new PocketError(
+      "PRODUCT_REQUIRED",
+      "Tên và mã mẫu áo không được để trống.",
+      "Nhập đủ tên và mã mẫu áo.",
+    );
+  for (const variant of input.variants) {
+    assertIntegerMoney(variant.salePrice, "salePrice");
+    assertIntegerMoney(variant.purchasePrice, "purchasePrice");
+    assertIntegerMoney(variant.lowStockThreshold, "lowStockThreshold");
+  }
+  return db.transaction("rw", [db.products, db.variants, db.auditLogs, db.outbox], async () => {
+    const product = await db.products.get(input.productId);
+    if (!product || product.shopId !== input.shopId)
+      throw new PocketError(
+        "PRODUCT_MISSING",
+        "Không tìm thấy mẫu áo.",
+        "Tải lại danh sách mẫu áo.",
+      );
+    const duplicate = await db.products
+      .where("shopId")
+      .equals(input.shopId)
+      .filter((item) => item.id !== product.id && item.productCode === productCode)
+      .first();
+    if (duplicate)
+      throw new PocketError(
+        "PRODUCT_CODE_EXISTS",
+        `Mã mẫu ${productCode} đã tồn tại.`,
+        "Dùng mã mẫu khác.",
+      );
+    const currentVariants = await db.variants.where("productId").equals(product.id).toArray();
+    const currentById = new Map(currentVariants.map((variant) => [variant.id, variant]));
+    const updatedVariants = input.variants.map((change) => {
+      const variant = currentById.get(change.id);
+      if (!variant || variant.shopId !== input.shopId)
+        throw new PocketError(
+          "VARIANT_MISSING",
+          "Một biến thể không còn tồn tại.",
+          "Tải lại mẫu áo rồi thử lại.",
+        );
+      const deletedAt = change.active ? undefined : (variant.deletedAt ?? nowIso());
+      return touch(
+        {
+          ...variant,
+          salePrice: change.salePrice,
+          purchasePrice: change.purchasePrice,
+          lowStockThreshold: change.lowStockThreshold,
+          active: change.active,
+          deletedAt,
+        },
+        input.deviceId,
+      );
+    });
+    const updated = touch(
+      {
+        ...product,
+        name,
+        productCode,
+        material: input.material?.trim() || undefined,
+        description: input.description?.trim() || undefined,
+        imageIds: input.imageIds ?? product.imageIds,
+      },
+      input.deviceId,
+    );
+    await db.products.put(updated);
+    if (updatedVariants.length) await db.variants.bulkPut(updatedVariants);
+    await db.auditLogs.add(
+      makeAudit(updated, "product.updated", "product", `Đã sửa mẫu áo ${updated.name}`, {
+        variants: updatedVariants.length,
+      }),
+    );
+    await db.outbox.bulkAdd([
+      makeOutbox(updated, "product", updated),
+      ...updatedVariants.map((variant) =>
+        makeOutbox(variant, "variant", variant, variant.active ? "update" : "delete"),
+      ),
+    ]);
+    return { product: updated, variants: updatedVariants };
+  });
+}
+
+export async function setProductActive(
+  shopId: string,
+  deviceId: string,
+  productId: string,
+  active: boolean,
+) {
+  return db.transaction("rw", [db.products, db.auditLogs, db.outbox], async () => {
+    const product = await db.products.get(productId);
+    if (!product || product.shopId !== shopId)
+      throw new PocketError(
+        "PRODUCT_MISSING",
+        "Không tìm thấy mẫu áo.",
+        "Tải lại danh sách mẫu áo.",
+      );
+    const deletedAt = active ? undefined : (product.deletedAt ?? nowIso());
+    const updated = touch({ ...product, active, deletedAt }, deviceId);
+    await db.products.put(updated);
+    await db.auditLogs.add(
+      makeAudit(
+        updated,
+        active ? "product.restored" : "product.deactivated",
+        "product",
+        active ? `Đã bán lại ${updated.name}` : `Đã tạm ẩn ${updated.name}`,
+      ),
+    );
+    await db.outbox.add(makeOutbox(updated, "product", updated, active ? "update" : "delete"));
+    return updated;
+  });
+}
+
 function cartesian<T>(groups: T[][]): T[][] {
   return groups.reduce<T[][]>(
     (result, group) => result.flatMap((row) => group.map((item) => [...row, item])),
@@ -328,6 +490,13 @@ export async function resolveVariant(shopId: string, lookup: string): Promise<Pr
       "VARIANT_INACTIVE",
       "Biến thể này đã ngừng bán.",
       "Mở biến thể khác hoặc kích hoạt lại trong kho.",
+    );
+  const product = await db.products.get(variant.productId);
+  if (!product?.active)
+    throw new PocketError(
+      "PRODUCT_INACTIVE",
+      "Mẫu áo này đang tạm ẩn.",
+      "Kích hoạt lại mẫu áo trước khi bán.",
     );
   return variant;
 }
@@ -415,7 +584,8 @@ export async function completeSale(input: CompleteSaleInput, options: CompleteSa
       );
       for (const [index, cartLine] of combined.entries()) {
         const variant = variants[index];
-        if (!variant || variant.shopId !== input.shopId || !variant.active) {
+        const product = products[index];
+        if (!variant || variant.shopId !== input.shopId || !variant.active || !product?.active) {
           throw new PocketError(
             "VARIANT_MISSING",
             "Một biến thể trong giỏ không còn khả dụng.",
@@ -425,6 +595,15 @@ export async function completeSale(input: CompleteSaleInput, options: CompleteSa
         if (!shop.allowNegativeStock && variant.stockQuantity < cartLine.quantity) {
           throw new InsufficientStockError(variant.id, variant.stockQuantity, cartLine.quantity);
         }
+      }
+      if (input.customerId) {
+        const customer = await db.customers.get(input.customerId);
+        if (!customer || customer.shopId !== input.shopId || !customer.active)
+          throw new PocketError(
+            "CUSTOMER_MISSING",
+            "Khách hàng không còn khả dụng.",
+            "Chọn lại khách hàng đang hoạt động.",
+          );
       }
       await db.sales.add(sale);
       if (options.failAt === "after-sale") throw new Error("Injected transaction failure");
@@ -549,6 +728,17 @@ export interface ReceiveStockInput {
 }
 
 export async function receiveStock(input: ReceiveStockInput) {
+  if (!input.lines.some((line) => line.quantity > 0))
+    throw new PocketError(
+      "EMPTY_PURCHASE",
+      "Phiếu nhập chưa có số lượng.",
+      "Nhập số lượng cho ít nhất một biến thể.",
+    );
+  assertIntegerMoney(input.amountPaid, "amountPaid");
+  for (const line of input.lines) {
+    assertIntegerMoney(line.quantity, "quantity");
+    assertIntegerMoney(line.unitCost, "unitCost");
+  }
   const total = input.lines.reduce((sum, line) => sum + line.quantity * line.unitCost, 0);
   const count = await db.purchases.where("shopId").equals(input.shopId).count();
   const purchase: Purchase = {
@@ -575,6 +765,15 @@ export async function receiveStock(input: ReceiveStockInput) {
       db.outbox,
     ],
     async () => {
+      if (input.supplierId) {
+        const supplier = await db.suppliers.get(input.supplierId);
+        if (!supplier || supplier.shopId !== input.shopId || !supplier.active)
+          throw new PocketError(
+            "SUPPLIER_MISSING",
+            "Xưởng không còn khả dụng.",
+            "Chọn lại xưởng đang hoạt động.",
+          );
+      }
       await db.purchases.add(purchase);
       const events: OutboxEvent[] = [makeOutbox(purchase, "purchase", purchase)];
       for (const lineInput of input.lines.filter((line) => line.quantity > 0)) {
@@ -670,6 +869,232 @@ export async function receiveStock(input: ReceiveStockInput) {
     },
   );
   return purchase;
+}
+
+export async function updatePurchaseDetails(input: {
+  shopId: string;
+  deviceId: string;
+  purchaseId: string;
+  supplierId?: string;
+  receivedAt: string;
+  note?: string;
+}) {
+  return db.transaction(
+    "rw",
+    [db.purchases, db.suppliers, db.payments, db.auditLogs, db.outbox],
+    async () => {
+      const purchase = await db.purchases.get(input.purchaseId);
+      if (!purchase || purchase.shopId !== input.shopId)
+        throw new PocketError(
+          "PURCHASE_MISSING",
+          "Không tìm thấy phiếu nhập.",
+          "Tải lại danh sách phiếu nhập.",
+        );
+      if (purchase.status === "cancelled")
+        throw new PocketError(
+          "PURCHASE_CANCELLED",
+          "Phiếu nhập đã hủy không thể sửa.",
+          "Tạo phiếu nhập mới nếu cần.",
+        );
+      if (!Number.isFinite(new Date(input.receivedAt).getTime()))
+        throw new PocketError("INVALID_DATE", "Ngày nhập không hợp lệ.", "Chọn lại ngày nhập.");
+      const events: OutboxEvent[] = [];
+      if (purchase.supplierId !== input.supplierId && purchase.amountDue > 0) {
+        if (purchase.supplierId) {
+          const previous = await db.suppliers.get(purchase.supplierId);
+          if (previous) {
+            const updatedPrevious = touch(
+              {
+                ...previous,
+                totalPayable: Math.max(0, previous.totalPayable - purchase.amountDue),
+              },
+              input.deviceId,
+            );
+            await db.suppliers.put(updatedPrevious);
+            events.push(makeOutbox(updatedPrevious, "supplier", updatedPrevious));
+          }
+        }
+        if (input.supplierId) {
+          const next = await db.suppliers.get(input.supplierId);
+          if (!next || next.shopId !== input.shopId || !next.active)
+            throw new PocketError(
+              "SUPPLIER_MISSING",
+              "Không tìm thấy xưởng mới.",
+              "Chọn lại xưởng.",
+            );
+          const updatedNext = touch(
+            { ...next, totalPayable: next.totalPayable + purchase.amountDue },
+            input.deviceId,
+          );
+          await db.suppliers.put(updatedNext);
+          events.push(makeOutbox(updatedNext, "supplier", updatedNext));
+        }
+      }
+      if (purchase.supplierId !== input.supplierId) {
+        const payments = await db.payments.where("referenceId").equals(purchase.id).toArray();
+        const updatedPayments = payments
+          .filter((payment) => payment.referenceType === "purchase")
+          .map((payment) => touch({ ...payment, supplierId: input.supplierId }, input.deviceId));
+        if (updatedPayments.length) {
+          await db.payments.bulkPut(updatedPayments);
+          events.push(...updatedPayments.map((payment) => makeOutbox(payment, "payment", payment)));
+        }
+      }
+      const updated = touch(
+        {
+          ...purchase,
+          supplierId: input.supplierId,
+          receivedAt: new Date(input.receivedAt).toISOString(),
+          note: input.note?.trim() || undefined,
+        },
+        input.deviceId,
+      );
+      await db.purchases.put(updated);
+      events.push(makeOutbox(updated, "purchase", updated));
+      await db.auditLogs.add(
+        makeAudit(
+          updated,
+          "purchase.updated",
+          "purchase",
+          `Đã sửa thông tin ${updated.receiptNumber}`,
+        ),
+      );
+      await db.outbox.bulkAdd(events);
+      return updated;
+    },
+  );
+}
+
+export async function cancelCompletedPurchase(
+  shopId: string,
+  deviceId: string,
+  purchaseId: string,
+) {
+  return db.transaction(
+    "rw",
+    [
+      db.shops,
+      db.purchases,
+      db.purchaseLines,
+      db.variants,
+      db.stockMovements,
+      db.suppliers,
+      db.payments,
+      db.auditLogs,
+      db.outbox,
+    ],
+    async () => {
+      const [shop, purchase] = await Promise.all([
+        db.shops.get(shopId),
+        db.purchases.get(purchaseId),
+      ]);
+      if (!shop) throw new PocketError("SHOP_MISSING", "Không tìm thấy shop.", "Tải lại ứng dụng.");
+      if (!purchase || purchase.shopId !== shopId)
+        throw new PocketError(
+          "PURCHASE_MISSING",
+          "Không tìm thấy phiếu nhập.",
+          "Tải lại danh sách phiếu nhập.",
+        );
+      if (purchase.status !== "completed")
+        throw new PocketError(
+          "PURCHASE_NOT_CANCELLABLE",
+          "Chỉ có thể hủy phiếu nhập đang hoàn tất.",
+          "Tải lại phiếu nhập.",
+        );
+      const lines = await db.purchaseLines.where("purchaseId").equals(purchase.id).toArray();
+      const variants = await db.variants.bulkGet(lines.map((line) => line.variantId));
+      for (const [index, line] of lines.entries()) {
+        const variant = variants[index];
+        if (!variant || variant.shopId !== shopId)
+          throw new PocketError(
+            "VARIANT_MISSING",
+            "Thiếu biến thể để hoàn tác phiếu nhập.",
+            "Đồng bộ dữ liệu rồi thử lại.",
+          );
+        if (!shop.allowNegativeStock && variant.stockQuantity < line.quantity)
+          throw new PocketError(
+            "PURCHASE_STOCK_USED",
+            `${variant.sku} không còn đủ tồn để hủy phiếu nhập.`,
+            "Hoàn trả/điều chỉnh các áo đã xuất trước khi hủy phiếu.",
+          );
+      }
+      const events: OutboxEvent[] = [];
+      const movements: StockMovement[] = [];
+      for (const [index, line] of lines.entries()) {
+        const variant = variants[index] as ProductVariant;
+        const updatedVariant = touch(
+          { ...variant, stockQuantity: variant.stockQuantity - line.quantity },
+          deviceId,
+        );
+        const movement: StockMovement = {
+          ...createMeta(shopId, deviceId),
+          variantId: variant.id,
+          movementType: "supplier_return",
+          quantityDelta: -line.quantity,
+          quantityBefore: variant.stockQuantity,
+          quantityAfter: updatedVariant.stockQuantity,
+          unitCost: line.unitCost,
+          referenceType: "purchase",
+          referenceId: purchase.id,
+          reason: `Hủy ${purchase.receiptNumber}`,
+          occurredAt: nowIso(),
+        };
+        await db.variants.put(updatedVariant);
+        movements.push(movement);
+        events.push(
+          makeOutbox(updatedVariant, "variant", updatedVariant),
+          makeOutbox(movement, "stockMovement", movement),
+        );
+      }
+      if (movements.length) await db.stockMovements.bulkAdd(movements);
+      if (purchase.amountDue > 0 && purchase.supplierId) {
+        const supplier = await db.suppliers.get(purchase.supplierId);
+        if (supplier) {
+          const updatedSupplier = touch(
+            {
+              ...supplier,
+              totalPayable: Math.max(0, supplier.totalPayable - purchase.amountDue),
+            },
+            deviceId,
+          );
+          await db.suppliers.put(updatedSupplier);
+          events.push(makeOutbox(updatedSupplier, "supplier", updatedSupplier));
+        }
+      }
+      if (purchase.amountPaid > 0) {
+        const refund: Payment = {
+          ...createMeta(shopId, deviceId),
+          direction: "incoming",
+          referenceType: "purchase",
+          referenceId: purchase.id,
+          supplierId: purchase.supplierId,
+          amount: purchase.amountPaid,
+          paymentMethod: "bank_transfer",
+          paidAt: nowIso(),
+          note: `Hoàn tiền khi hủy ${purchase.receiptNumber}`,
+        };
+        await db.payments.add(refund);
+        events.push(makeOutbox(refund, "payment", refund));
+      }
+      const updatedPurchase = touch(
+        { ...purchase, status: "cancelled" as const, deletedAt: nowIso() },
+        deviceId,
+      );
+      await db.purchases.put(updatedPurchase);
+      events.push(makeOutbox(updatedPurchase, "purchase", updatedPurchase, "delete"));
+      await db.auditLogs.add(
+        makeAudit(
+          updatedPurchase,
+          "purchase.cancelled",
+          "purchase",
+          `Đã hủy ${purchase.receiptNumber} và đảo phát sinh kho/công nợ`,
+          { movements: movements.length },
+        ),
+      );
+      await db.outbox.bulkAdd(events);
+      return updatedPurchase;
+    },
+  );
 }
 
 export async function cancelCompletedSale(shopId: string, deviceId: string, saleId: string) {
@@ -775,6 +1200,40 @@ export async function cancelCompletedSale(shopId: string, deviceId: string, sale
       return updatedSale;
     },
   );
+}
+
+export async function updateSaleDetails(input: {
+  shopId: string;
+  deviceId: string;
+  saleId: string;
+  deliveryStatus: DeliveryStatus;
+  note?: string;
+}) {
+  return db.transaction("rw", [db.sales, db.auditLogs, db.outbox], async () => {
+    const sale = await db.sales.get(input.saleId);
+    if (!sale || sale.shopId !== input.shopId)
+      throw new PocketError("SALE_MISSING", "Không tìm thấy đơn hàng.", "Tải lại danh sách đơn.");
+    if (sale.status === "cancelled")
+      throw new PocketError(
+        "SALE_CANCELLED",
+        "Đơn đã hủy không thể chỉnh sửa.",
+        "Tạo đơn mới nếu cần.",
+      );
+    const updated = touch(
+      {
+        ...sale,
+        deliveryStatus: input.deliveryStatus,
+        note: input.note?.trim() || undefined,
+      },
+      input.deviceId,
+    );
+    await db.sales.put(updated);
+    await db.auditLogs.add(
+      makeAudit(updated, "sale.updated", "sale", `Đã sửa giao hàng/ghi chú ${sale.orderNumber}`),
+    );
+    await db.outbox.add(makeOutbox(updated, "sale", updated));
+    return updated;
+  });
 }
 
 export interface CompleteReturnExchangeInput {
@@ -954,26 +1413,136 @@ export async function completeReturnExchange(input: CompleteReturnExchangeInput)
 }
 
 export async function addExpense(input: {
+  id?: string;
   shopId: string;
   deviceId: string;
   category: string;
   amount: number;
   note?: string;
   date?: string;
+  attachmentIds?: string[];
 }) {
+  assertIntegerMoney(input.amount, "amount");
+  if (input.amount <= 0)
+    throw new PocketError(
+      "INVALID_EXPENSE",
+      "Số tiền chi phải lớn hơn 0.",
+      "Nhập lại số tiền chi.",
+    );
+  if (!input.category.trim())
+    throw new PocketError(
+      "EXPENSE_CATEGORY_REQUIRED",
+      "Nhóm chi không được để trống.",
+      "Chọn nhóm chi.",
+    );
+  const date = input.date ?? nowIso();
+  if (!Number.isFinite(new Date(date).getTime()))
+    throw new PocketError("INVALID_DATE", "Ngày chi không hợp lệ.", "Chọn lại ngày chi.");
   const expense: Expense = {
-    ...createMeta(input.shopId, input.deviceId),
-    category: input.category,
+    ...createMeta(input.shopId, input.deviceId, input.id),
+    category: input.category.trim(),
     amount: input.amount,
-    note: input.note,
-    date: input.date ?? nowIso(),
-    attachmentIds: [],
+    note: input.note?.trim() || undefined,
+    date: new Date(date).toISOString(),
+    attachmentIds: input.attachmentIds ?? [],
   };
-  await db.transaction("rw", [db.expenses, db.outbox], async () => {
+  await db.transaction("rw", [db.expenses, db.auditLogs, db.outbox], async () => {
     await db.expenses.add(expense);
+    await db.auditLogs.add(
+      makeAudit(expense, "expense.created", "expense", `Đã thêm chi phí ${expense.category}`),
+    );
     await db.outbox.add(makeOutbox(expense, "expense", expense));
   });
   return expense;
+}
+
+export async function updateExpense(input: {
+  shopId: string;
+  deviceId: string;
+  expenseId: string;
+  category: string;
+  amount: number;
+  note?: string;
+  date: string;
+  attachmentIds?: string[];
+}) {
+  assertIntegerMoney(input.amount, "amount");
+  if (input.amount <= 0)
+    throw new PocketError(
+      "INVALID_EXPENSE",
+      "Số tiền chi phải lớn hơn 0.",
+      "Nhập lại số tiền chi.",
+    );
+  if (!input.category.trim() || !Number.isFinite(new Date(input.date).getTime()))
+    throw new PocketError(
+      "INVALID_EXPENSE",
+      "Nhóm chi hoặc ngày chi không hợp lệ.",
+      "Kiểm tra lại thông tin chi phí.",
+    );
+  return db.transaction("rw", [db.expenses, db.auditLogs, db.outbox], async () => {
+    const expense = await db.expenses.get(input.expenseId);
+    if (!expense || expense.shopId !== input.shopId)
+      throw new PocketError(
+        "EXPENSE_MISSING",
+        "Không tìm thấy khoản chi.",
+        "Tải lại danh sách chi phí.",
+      );
+    if (expense.deletedAt)
+      throw new PocketError(
+        "EXPENSE_VOIDED",
+        "Khoản chi đã hủy không thể sửa.",
+        "Khôi phục khoản chi trước khi sửa.",
+      );
+    const updated = touch(
+      {
+        ...expense,
+        category: input.category.trim(),
+        amount: input.amount,
+        note: input.note?.trim() || undefined,
+        date: new Date(input.date).toISOString(),
+        attachmentIds: input.attachmentIds ?? expense.attachmentIds,
+      },
+      input.deviceId,
+    );
+    await db.expenses.put(updated);
+    await db.auditLogs.add(
+      makeAudit(updated, "expense.updated", "expense", `Đã sửa chi phí ${updated.category}`),
+    );
+    await db.outbox.add(makeOutbox(updated, "expense", updated));
+    return updated;
+  });
+}
+
+export async function setExpenseActive(
+  shopId: string,
+  deviceId: string,
+  expenseId: string,
+  active: boolean,
+) {
+  return db.transaction("rw", [db.expenses, db.auditLogs, db.outbox], async () => {
+    const expense = await db.expenses.get(expenseId);
+    if (!expense || expense.shopId !== shopId)
+      throw new PocketError(
+        "EXPENSE_MISSING",
+        "Không tìm thấy khoản chi.",
+        "Tải lại danh sách chi phí.",
+      );
+    const updated = touch(
+      { ...expense, deletedAt: active ? undefined : (expense.deletedAt ?? nowIso()) },
+      deviceId,
+    );
+    await db.expenses.put(updated);
+    await db.auditLogs.add(
+      makeAudit(
+        updated,
+        active ? "expense.restored" : "expense.voided",
+        "expense",
+        active ? `Đã khôi phục chi phí ${updated.category}` : `Đã hủy chi phí ${updated.category}`,
+      ),
+    );
+    await db.outbox.add(makeOutbox(updated, "expense", updated, active ? "update" : "delete"));
+    return updated;
+  });
 }
 
 export async function createCustomer(input: {
@@ -984,6 +1553,12 @@ export async function createCustomer(input: {
   address?: string;
   note?: string;
 }) {
+  if (!input.name.trim())
+    throw new PocketError(
+      "PARTY_NAME_REQUIRED",
+      "Tên không được để trống.",
+      "Nhập tên trước khi lưu.",
+    );
   const customer: Customer = {
     ...createMeta(input.shopId, input.deviceId),
     name: input.name.trim(),
@@ -993,8 +1568,11 @@ export async function createCustomer(input: {
     totalReceivable: 0,
     active: true,
   };
-  await db.transaction("rw", [db.customers, db.outbox], async () => {
+  await db.transaction("rw", [db.customers, db.auditLogs, db.outbox], async () => {
     await db.customers.add(customer);
+    await db.auditLogs.add(
+      makeAudit(customer, "customer.created", "customer", `Đã thêm khách ${customer.name}`),
+    );
     await db.outbox.add(makeOutbox(customer, "customer", customer));
   });
   return customer;
@@ -1008,6 +1586,12 @@ export async function createSupplier(input: {
   address?: string;
   note?: string;
 }) {
+  if (!input.name.trim())
+    throw new PocketError(
+      "PARTY_NAME_REQUIRED",
+      "Tên không được để trống.",
+      "Nhập tên trước khi lưu.",
+    );
   const supplier: Supplier = {
     ...createMeta(input.shopId, input.deviceId),
     name: input.name.trim(),
@@ -1017,11 +1601,105 @@ export async function createSupplier(input: {
     totalPayable: 0,
     active: true,
   };
-  await db.transaction("rw", [db.suppliers, db.outbox], async () => {
+  await db.transaction("rw", [db.suppliers, db.auditLogs, db.outbox], async () => {
     await db.suppliers.add(supplier);
+    await db.auditLogs.add(
+      makeAudit(supplier, "supplier.created", "supplier", `Đã thêm xưởng ${supplier.name}`),
+    );
     await db.outbox.add(makeOutbox(supplier, "supplier", supplier));
   });
   return supplier;
+}
+
+export async function updateParty(input: {
+  shopId: string;
+  deviceId: string;
+  partyType: "customer" | "supplier";
+  partyId: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  note?: string;
+}) {
+  if (!input.name.trim())
+    throw new PocketError(
+      "PARTY_NAME_REQUIRED",
+      "Tên không được để trống.",
+      "Nhập tên trước khi lưu.",
+    );
+  const table = input.partyType === "customer" ? db.customers : db.suppliers;
+  return db.transaction("rw", [table, db.auditLogs, db.outbox], async () => {
+    const party = await table.get(input.partyId);
+    if (!party || party.shopId !== input.shopId)
+      throw new PocketError(
+        "PARTY_MISSING",
+        "Không tìm thấy đối tác.",
+        "Tải lại danh sách rồi thử lại.",
+      );
+    const updated = touch(
+      {
+        ...party,
+        name: input.name.trim(),
+        phone: input.phone?.trim() || undefined,
+        address: input.address?.trim() || undefined,
+        note: input.note?.trim() || undefined,
+      },
+      input.deviceId,
+    );
+    if (input.partyType === "customer") await db.customers.put(updated as Customer);
+    else await db.suppliers.put(updated as Supplier);
+    await db.auditLogs.add(
+      makeAudit(
+        updated,
+        `${input.partyType}.updated`,
+        input.partyType,
+        `Đã sửa ${input.partyType === "customer" ? "khách" : "xưởng"} ${updated.name}`,
+      ),
+    );
+    await db.outbox.add(makeOutbox(updated, input.partyType, updated));
+    return updated;
+  });
+}
+
+export async function setPartyActive(input: {
+  shopId: string;
+  deviceId: string;
+  partyType: "customer" | "supplier";
+  partyId: string;
+  active: boolean;
+}) {
+  const table = input.partyType === "customer" ? db.customers : db.suppliers;
+  return db.transaction("rw", [table, db.auditLogs, db.outbox], async () => {
+    const party = await table.get(input.partyId);
+    if (!party || party.shopId !== input.shopId)
+      throw new PocketError(
+        "PARTY_MISSING",
+        "Không tìm thấy đối tác.",
+        "Tải lại danh sách rồi thử lại.",
+      );
+    const updated = touch(
+      {
+        ...party,
+        active: input.active,
+        deletedAt: input.active ? undefined : (party.deletedAt ?? nowIso()),
+      },
+      input.deviceId,
+    );
+    if (input.partyType === "customer") await db.customers.put(updated as Customer);
+    else await db.suppliers.put(updated as Supplier);
+    await db.auditLogs.add(
+      makeAudit(
+        updated,
+        `${input.partyType}.${input.active ? "restored" : "deactivated"}`,
+        input.partyType,
+        input.active ? `Đã kích hoạt lại ${updated.name}` : `Đã tạm ẩn ${updated.name}`,
+      ),
+    );
+    await db.outbox.add(
+      makeOutbox(updated, input.partyType, updated, input.active ? "update" : "delete"),
+    );
+    return updated;
+  });
 }
 
 export async function recordDebtPayment(input: {
@@ -1032,6 +1710,13 @@ export async function recordDebtPayment(input: {
   amount: number;
   method: Payment["paymentMethod"];
 }) {
+  assertIntegerMoney(input.amount, "amount");
+  if (input.amount <= 0)
+    throw new PocketError(
+      "INVALID_PAYMENT",
+      "Số tiền thanh toán phải lớn hơn 0.",
+      "Nhập lại số tiền.",
+    );
   return db.transaction(
     "rw",
     [db.customers, db.suppliers, db.payments, db.outbox, db.auditLogs],
@@ -1047,6 +1732,12 @@ export async function recordDebtPayment(input: {
           "Chọn lại khách hàng hoặc xưởng.",
         );
       const current = "totalReceivable" in party ? party.totalReceivable : party.totalPayable;
+      if (current <= 0)
+        throw new PocketError(
+          "NO_DEBT",
+          "Đối tác hiện không có công nợ cần thanh toán.",
+          "Tải lại thông tin công nợ.",
+        );
       const amount = Math.min(current, input.amount);
       const updated: Customer | Supplier =
         "totalReceivable" in party
@@ -1096,6 +1787,81 @@ export async function getInventoryConsistency(shopId: string) {
         consistent: variant.stockQuantity === ledgerQuantity,
       };
     }),
+  );
+}
+
+export async function adjustStock(input: {
+  shopId: string;
+  deviceId: string;
+  variantId: string;
+  quantityDelta: number;
+  reason: string;
+}) {
+  if (!Number.isSafeInteger(input.quantityDelta) || input.quantityDelta === 0)
+    throw new PocketError(
+      "INVALID_ADJUSTMENT",
+      "Số lượng điều chỉnh phải là số nguyên khác 0.",
+      "Nhập số dương để tăng hoặc số âm để giảm.",
+    );
+  if (!input.reason.trim())
+    throw new PocketError(
+      "ADJUSTMENT_REASON_REQUIRED",
+      "Cần ghi lý do điều chỉnh kho.",
+      "Nhập lý do kiểm kê hoặc sai lệch.",
+    );
+  return db.transaction(
+    "rw",
+    [db.shops, db.variants, db.stockMovements, db.auditLogs, db.outbox],
+    async () => {
+      const [shop, variant] = await Promise.all([
+        db.shops.get(input.shopId),
+        db.variants.get(input.variantId),
+      ]);
+      if (!shop || !variant || variant.shopId !== input.shopId)
+        throw new PocketError(
+          "VARIANT_MISSING",
+          "Không tìm thấy biến thể cần điều chỉnh.",
+          "Tải lại kho rồi thử lại.",
+        );
+      const after = variant.stockQuantity + input.quantityDelta;
+      if (!shop.allowNegativeStock && after < 0)
+        throw new InsufficientStockError(
+          variant.id,
+          variant.stockQuantity,
+          Math.abs(input.quantityDelta),
+        );
+      const updated = touch({ ...variant, stockQuantity: after }, input.deviceId);
+      const movementMeta = createMeta(input.shopId, input.deviceId);
+      const movement: StockMovement = {
+        ...movementMeta,
+        variantId: variant.id,
+        movementType: input.quantityDelta > 0 ? "adjustment_in" : "adjustment_out",
+        quantityDelta: input.quantityDelta,
+        quantityBefore: variant.stockQuantity,
+        quantityAfter: after,
+        unitCost: variant.purchasePrice,
+        referenceType: "adjustment",
+        referenceId: movementMeta.id,
+        reason: input.reason.trim(),
+        occurredAt: nowIso(),
+      };
+      await db.variants.put(updated);
+      await db.stockMovements.add(movement);
+      await db.auditLogs.add(
+        makeAudit(
+          movement,
+          "stock.adjusted",
+          "stockMovement",
+          `Điều chỉnh ${variant.sku}: ${input.quantityDelta > 0 ? "+" : ""}${input.quantityDelta}`,
+          { reason: movement.reason },
+        ),
+      );
+      await db.outbox.bulkAdd([
+        makeOutbox(updated, "variant", updated),
+        makeOutbox(movement, "stockMovement", movement),
+      ]);
+      return { variant: updated, movement };
+    },
   );
 }
 

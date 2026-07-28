@@ -1,21 +1,28 @@
-import { db, getDeviceId, getInventoryConsistency, repairInventory } from "@pocket/local-db";
+import {
+  adjustStock,
+  db,
+  getDeviceId,
+  getInventoryConsistency,
+  repairInventory,
+} from "@pocket/local-db";
 import { Badge, Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  ChevronRight,
   ClipboardCheck,
   History,
   PackageOpen,
   PackagePlus,
   RefreshCw,
   Search,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { formatDateTime, formatMoney } from "../../app/format";
+import { formatDateTime, formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
 import { useToast } from "../../components/Toast";
 import { PageHeader, SearchField } from "../../components/Ui";
@@ -32,6 +39,10 @@ export default function InventoryPage() {
   const [productId, setProductId] = useState("");
   const [neck, setNeck] = useState("");
   const [checks, setChecks] = useState<Awaited<ReturnType<typeof getInventoryConsistency>>>();
+  const [adjustingId, setAdjustingId] = useState("");
+  const [quantityDelta, setQuantityDelta] = useState(0);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
   const data = useLiveQuery(
     async () => ({
       variants: await db.variants.where("shopId").equals(shopId).toArray(),
@@ -93,6 +104,26 @@ export default function InventoryPage() {
     setChecks(await getInventoryConsistency(shopId));
     show("Đã sửa tồn cache và lưu lịch sử");
   }
+  async function submitAdjustment() {
+    if (!adjustingId) return;
+    try {
+      const result = await adjustStock({
+        shopId,
+        deviceId: getDeviceId(),
+        variantId: adjustingId,
+        quantityDelta,
+        reason,
+      });
+      show(`Đã điều chỉnh tồn ${result.variant.sku}`);
+      setAdjustingId("");
+      setQuantityDelta(0);
+      setReason("");
+      setError("");
+    } catch (cause) {
+      setError(toVietnameseError(cause));
+    }
+  }
+  const adjusting = data.variants.find((variant) => variant.id === adjustingId);
   return (
     <div>
       <PageHeader
@@ -241,7 +272,17 @@ export default function InventoryPage() {
                       ? "Sắp hết"
                       : "Ổn"}
                 </Badge>
-                <ChevronRight />
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setAdjustingId(variant.id);
+                    setQuantityDelta(0);
+                    setReason("");
+                    setError("");
+                  }}
+                >
+                  <SlidersHorizontal /> Điều chỉnh
+                </Button>
               </Card>
             ))}
           </div>
@@ -394,6 +435,47 @@ export default function InventoryPage() {
               ))
           )}
         </section>
+      )}
+      {adjusting && (
+        <div className="sheet-backdrop">
+          <div className="bottom-sheet">
+            <button
+              type="button"
+              className="sheet-close"
+              aria-label="Đóng"
+              onClick={() => setAdjustingId("")}
+            >
+              <X />
+            </button>
+            <h2>Điều chỉnh tồn kho</h2>
+            <p>
+              {names.get(adjusting.productId)} · {adjusting.attributeSummary} · hiện có{" "}
+              {adjusting.stockQuantity} áo
+            </p>
+            <div className="form-card">
+              <label>
+                Số lượng thay đổi
+                <input
+                  type="number"
+                  step="1"
+                  value={quantityDelta}
+                  onChange={(event) => setQuantityDelta(Number(event.target.value))}
+                />
+                <small>Nhập số dương để tăng, số âm để giảm.</small>
+              </label>
+              <label>
+                Lý do
+                <textarea
+                  rows={3}
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </label>
+            </div>
+            {error && <p className="form-error">{error}</p>}
+            <Button onClick={submitAdjustment}>Lưu phát sinh điều chỉnh</Button>
+          </div>
+        </div>
       )}
     </div>
   );

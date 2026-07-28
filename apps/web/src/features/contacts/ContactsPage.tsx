@@ -5,10 +5,21 @@ import {
   db,
   getDeviceId,
   recordDebtPayment,
+  setPartyActive,
+  updateParty,
 } from "@pocket/local-db";
-import { Button, Card } from "@pocket/ui";
+import { Badge, Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Banknote, ChevronRight, CirclePlus, Factory, Phone, UserRound, X } from "lucide-react";
+import {
+  Banknote,
+  ChevronRight,
+  CirclePlus,
+  Factory,
+  Pencil,
+  Phone,
+  UserRound,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import { formatDateTime, formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
@@ -22,11 +33,13 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
   const customerMode = type === "customer";
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("");
-  const [sheet, setSheet] = useState<"add" | "pay" | null>(null);
+  const [sheet, setSheet] = useState<"add" | "edit" | "pay" | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
+  const [note, setNote] = useState("");
   const [amount, setAmount] = useState(0);
+  const [method, setMethod] = useState<"bank_transfer" | "cash">("bank_transfer");
   const [error, setError] = useState("");
   const customers =
     useLiveQuery<Customer[]>(
@@ -61,20 +74,50 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
   const filtered = contacts.filter((item) =>
     `${item.name} ${item.phone}`.toLowerCase().includes(query.toLowerCase()),
   );
-  async function add() {
+  function openAdd() {
+    setName("");
+    setPhone("");
+    setAddress("");
+    setNote("");
+    setError("");
+    setSheet("add");
+  }
+  function openEdit() {
+    if (!selected) return;
+    setName(selected.name);
+    setPhone(selected.phone ?? "");
+    setAddress(selected.address ?? "");
+    setNote(selected.note ?? "");
+    setError("");
+    setSheet("edit");
+  }
+  async function saveParty() {
     if (!name.trim()) {
       setError("Nhập tên trước khi lưu.");
       return;
     }
     try {
-      if (customerMode)
-        await createCustomer({ shopId, deviceId: getDeviceId(), name, phone, address });
-      else await createSupplier({ shopId, deviceId: getDeviceId(), name, phone, address });
-      show(`Đã thêm ${customerMode ? "khách hàng" : "xưởng"}`);
+      if (sheet === "edit" && selected) {
+        await updateParty({
+          shopId,
+          deviceId: getDeviceId(),
+          partyType: type,
+          partyId: selected.id,
+          name,
+          phone,
+          address,
+          note,
+        });
+        show(`Đã sửa ${customerMode ? "khách hàng" : "xưởng"}`);
+      } else if (customerMode)
+        await createCustomer({ shopId, deviceId: getDeviceId(), name, phone, address, note });
+      else await createSupplier({ shopId, deviceId: getDeviceId(), name, phone, address, note });
+      if (sheet === "add") show(`Đã thêm ${customerMode ? "khách hàng" : "xưởng"}`);
       setSheet(null);
       setName("");
       setPhone("");
       setAddress("");
+      setNote("");
     } catch (cause) {
       setError(toVietnameseError(cause));
     }
@@ -88,13 +131,36 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
         partyType: type,
         partyId: selected.id,
         amount,
-        method: "bank_transfer",
+        method,
       });
       show("Đã ghi nhận thanh toán công nợ");
       setSheet(null);
       setAmount(0);
     } catch (cause) {
       setError(toVietnameseError(cause));
+    }
+  }
+  async function toggleActive() {
+    if (!selected) return;
+    const active = !selected.active;
+    if (
+      !active &&
+      !window.confirm(
+        `Tạm ẩn ${customerMode ? "khách hàng" : "xưởng"}? Công nợ và lịch sử vẫn được giữ nguyên.`,
+      )
+    )
+      return;
+    try {
+      await setPartyActive({
+        shopId,
+        deviceId: getDeviceId(),
+        partyType: type,
+        partyId: selected.id,
+        active,
+      });
+      show(active ? "Đã kích hoạt lại" : "Đã tạm ẩn");
+    } catch (cause) {
+      show(toVietnameseError(cause));
     }
   }
   if (selected) {
@@ -105,6 +171,12 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
           title={selected.name}
           eyebrow={customerMode ? "KHÁCH HÀNG" : "XƯỞNG / NHÀ CUNG CẤP"}
           back
+          onBack={() => setSelectedId("")}
+          action={
+            <Badge tone={selected.active ? "success" : "neutral"}>
+              {selected.active ? "Đang hoạt động" : "Tạm ẩn"}
+            </Badge>
+          }
         />
         <div className="contact-detail">
           <Card className="contact-hero">
@@ -124,6 +196,14 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
                 <Banknote />
                 Ghi nhận thanh toán
               </Button>
+              <div className="crud-actions">
+                <Button variant="secondary" onClick={openEdit}>
+                  <Pencil /> Sửa
+                </Button>
+                <Button variant={selected.active ? "danger" : "secondary"} onClick={toggleActive}>
+                  {selected.active ? "Tạm ẩn" : "Kích hoạt"}
+                </Button>
+              </div>
             </div>
           </Card>
           <section>
@@ -161,20 +241,27 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
     return (
       <div className="sheet-backdrop">
         <div className="bottom-sheet">
-          <button type="button" className="sheet-close" onClick={() => setSheet(null)}>
+          <button
+            type="button"
+            className="sheet-close"
+            aria-label="Đóng"
+            onClick={() => setSheet(null)}
+          >
             <X />
           </button>
           <h2>
             {sheet === "add"
               ? `Thêm ${customerMode ? "khách hàng" : "xưởng"}`
-              : "Ghi nhận thanh toán"}
+              : sheet === "edit"
+                ? `Sửa ${customerMode ? "khách hàng" : "xưởng"}`
+                : "Ghi nhận thanh toán"}
           </h2>
           <p>
-            {sheet === "add"
+            {sheet === "add" || sheet === "edit"
               ? "Thông tin cơ bản có thể bổ sung sau."
               : `${selected?.name} · Còn ${formatMoney(selected ? debt(selected) : 0)}`}
           </p>
-          {sheet === "add" ? (
+          {sheet === "add" || sheet === "edit" ? (
             <div className="form-card">
               <label>
                 Tên
@@ -187,6 +274,10 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
               <label>
                 Địa chỉ
                 <input value={address} onChange={(e) => setAddress(e.target.value)} />
+              </label>
+              <label>
+                Ghi chú
+                <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
               </label>
             </div>
           ) : (
@@ -201,15 +292,20 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
               </label>
               <label>
                 Phương thức
-                <select>
-                  <option>Chuyển khoản</option>
-                  <option>Tiền mặt</option>
+                <select
+                  value={method}
+                  onChange={(event) => setMethod(event.target.value as typeof method)}
+                >
+                  <option value="bank_transfer">Chuyển khoản</option>
+                  <option value="cash">Tiền mặt</option>
                 </select>
               </label>
             </div>
           )}
           {error && <p className="form-error">{error}</p>}
-          <Button onClick={sheet === "add" ? add : pay}>Lưu thanh toán</Button>
+          <Button onClick={sheet === "pay" ? pay : saveParty}>
+            {sheet === "pay" ? "Lưu thanh toán" : "Lưu thông tin"}
+          </Button>
         </div>
       </div>
     );
@@ -220,7 +316,7 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
         title={customerMode ? "Khách hàng" : "Xưởng / Nhà cung cấp"}
         eyebrow={customerMode ? "NGƯỜI MUA" : "NGUỒN NHẬP ÁO"}
         action={
-          <Button onClick={() => setSheet("add")}>
+          <Button onClick={openAdd}>
             <CirclePlus />
             Thêm {customerMode ? "khách" : "xưởng"}
           </Button>
@@ -234,7 +330,7 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
         </Card>
         <Card>
           <small>Tổng {customerMode ? "khách" : "xưởng"}</small>
-          <strong>{contacts.length}</strong>
+          <strong>{contacts.filter((item) => item.active).length}</strong>
           <span>Đang hoạt động</span>
         </Card>
       </div>
@@ -246,6 +342,7 @@ export default function ContactsPage({ type }: { type: "customer" | "supplier" }
               <span className="contact-avatar">{customerMode ? <UserRound /> : <Factory />}</span>
               <span>
                 <strong>{contact.name}</strong>
+                {!contact.active && <Badge tone="neutral">Tạm ẩn</Badge>}
                 <small>{contact.phone || "Chưa có số điện thoại"}</small>
               </span>
               <span>

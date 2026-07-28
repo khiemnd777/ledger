@@ -1,5 +1,6 @@
-import { hasFirebaseConfig, uploadProductImage } from "@pocket/firebase";
-import { createProductWithVariants, db, getDeviceId } from "@pocket/local-db";
+import { createId } from "@pocket/domain";
+import { deleteCloudFile, hasFirebaseConfig, uploadProductImage } from "@pocket/firebase";
+import { createProductWithVariants, getDeviceId } from "@pocket/local-db";
 import { Button, Card } from "@pocket/ui";
 import {
   ArrowLeft,
@@ -100,8 +101,26 @@ export default function ProductFormPage() {
       return;
     }
     setBusy(true);
+    const productId = createId();
+    const uploadedPaths: string[] = [];
     try {
+      if (imageFiles.length) {
+        if (!user || !hasFirebaseConfig())
+          throw new Error("Cần đăng nhập Firebase để tải ảnh lên cloud.");
+        for (const [index, file] of imageFiles.entries()) {
+          const uploaded = await uploadProductImage({
+            ownerUid: user.uid,
+            shopId: activeShop.id,
+            productId,
+            file,
+            onProgress: (percent) =>
+              setImageProgress(Math.round(((index + percent / 100) / imageFiles.length) * 100)),
+          });
+          uploadedPaths.push(uploaded.path);
+        }
+      }
       const result = await createProductWithVariants({
+        id: productId,
         shopId: activeShop.id,
         deviceId: getDeviceId(),
         name: parsed.data.name,
@@ -111,35 +130,18 @@ export default function ProductFormPage() {
         salePrice: parsed.data.salePrice,
         openingStock: parsed.data.openingStock,
         lowStockThreshold: parsed.data.lowStockThreshold,
+        imageIds: [...new Set(uploadedPaths)],
         attributes: [
           { name: "Màu", values: colors.map((value) => ({ value })) },
           { name: "Size", values: sizes.map((value) => ({ value })) },
           { name: "Kiểu cổ", values: necks.map((value) => ({ value })) },
         ],
       });
-      if (imageFiles.length && user && hasFirebaseConfig()) {
-        const imageIds: string[] = [];
-        for (const [index, file] of imageFiles.entries()) {
-          const uploaded = await uploadProductImage({
-            ownerUid: user.uid,
-            shopId: activeShop.id,
-            productId: result.product.id,
-            file,
-            onProgress: (percent) =>
-              setImageProgress(Math.round(((index + percent / 100) / imageFiles.length) * 100)),
-          });
-          imageIds.push(uploaded.path);
-        }
-        await db.products.put({
-          ...result.product,
-          imageIds,
-          updatedAt: new Date().toISOString(),
-          revision: result.product.revision + 1,
-        });
-      }
       show(`Đã tạo ${variantCount} biến thể và QR riêng`);
       navigate(`/products/${result.product.id}`);
     } catch (cause) {
+      if (user && hasFirebaseConfig())
+        await Promise.allSettled(uploadedPaths.map((path) => deleteCloudFile(user.uid, path)));
       setError(toVietnameseError(cause));
     } finally {
       setBusy(false);

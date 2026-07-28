@@ -57,4 +57,12 @@ describe("money and inventory calculations", () => {
       netProfit: 90000,
     });
   });
+
+  it("excludes voided expenses from profit", () => {
+    const active = { amount: 50000 } as Expense;
+    const voided = { amount: 70000, deletedAt: "2026-07-28T12:00:00.000Z" } as Expense;
+    expect(
+      calculateReport({ sales: [], saleLines: [], expenses: [active, voided], returns: [] }),
+    ).toMatchObject({ expenseTotal: 50000, netProfit: -50000 });
+  });
 });

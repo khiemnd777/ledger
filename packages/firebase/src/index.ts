@@ -259,6 +259,14 @@ export class RealtimeDatabaseCloudAdapter implements CloudFileAdapter {
       .map((item) => ({ path: item.path, updatedAt: item.updatedAt }))
       .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
   }
+
+  async delete(path: string): Promise<void> {
+    const fileId = await this.fileId(path);
+    await update(databaseRef(this.database), {
+      [`users/${this.ownerUid}/cloudFileBlobs/${fileId}`]: null,
+      [`users/${this.ownerUid}/cloudFileIndex/${fileId}`]: null,
+    });
+  }
 }
 
 const SUPPORTED_IMAGES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -313,4 +321,31 @@ export async function uploadProductImage(input: {
   );
   input.onProgress?.(100);
   return { path, hash: prepared.hash };
+}
+
+export async function uploadExpenseAttachment(input: {
+  ownerUid: string;
+  shopId: string;
+  expenseId: string;
+  file: File;
+  onProgress?: (percent: number) => void;
+}) {
+  const clients = getFirebaseClients();
+  if (!clients) throw new Error("Firebase Realtime Database chưa được cấu hình.");
+  const prepared = await prepareImage(input.file);
+  const path = `users/${input.ownerUid}/shops/${input.shopId}/expense-attachments/${input.expenseId}/${prepared.hash}.webp`;
+  input.onProgress?.(30);
+  await new RealtimeDatabaseCloudAdapter(clients.database, input.ownerUid).upload(
+    path,
+    new Uint8Array(await prepared.blob.arrayBuffer()),
+    "image/webp",
+  );
+  input.onProgress?.(100);
+  return { path, hash: prepared.hash };
+}
+
+export async function deleteCloudFile(ownerUid: string, path: string): Promise<void> {
+  const clients = getFirebaseClients();
+  if (!clients) throw new Error("Firebase Realtime Database chưa được cấu hình.");
+  await new RealtimeDatabaseCloudAdapter(clients.database, ownerUid).delete(path);
 }

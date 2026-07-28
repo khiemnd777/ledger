@@ -5,7 +5,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { get, ref, set, update } from "firebase/database";
+import { get, ref, remove, set, update } from "firebase/database";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 
 let env: RulesTestEnvironment;
@@ -82,6 +82,23 @@ describe("Realtime Database tenant isolation", () => {
       set(ref(database, indexPath), {
         ...validMetadata,
         updatedAt: "2026-07-28T12:01:00.000Z",
+      }),
+    );
+  });
+
+  it("allows the owner to delete both index and blob but denies another user", async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await update(ref(context.database()), {
+        [indexPath]: validMetadata,
+        [blobPath]: { 0: "H4sI" },
+      });
+    });
+    await assertFails(remove(ref(env.authenticatedContext("user-b").database(), indexPath)));
+    const owner = env.authenticatedContext("user-a").database();
+    await assertSucceeds(
+      update(ref(owner), {
+        [indexPath]: null,
+        [blobPath]: null,
       }),
     );
   });

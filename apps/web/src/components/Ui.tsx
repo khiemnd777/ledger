@@ -8,11 +8,13 @@ export function PageHeader({
   eyebrow,
   action,
   back,
+  onBack,
 }: {
   title: string;
   eyebrow?: string;
   action?: ReactNode;
   back?: boolean;
+  onBack?: () => void;
 }) {
   const navigate = useNavigate();
   return (
@@ -23,7 +25,7 @@ export function PageHeader({
             type="button"
             className="icon-button"
             aria-label="Quay lại"
-            onClick={() => navigate(-1)}
+            onClick={() => (onBack ? onBack() : navigate(-1))}
           >
             <ChevronLeft />
           </button>

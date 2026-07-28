@@ -4,6 +4,8 @@
 
 SỔ TAY là PWA mobile-first cho shop thời trang nhỏ: quản lý mẫu áo và biến thể, in/quét QR, bán hàng, nhập áo, đổi trả, công nợ, chi phí và báo cáo. Ứng dụng làm việc trên IndexedDB khi offline và đồng bộ các changeset bất biến lên Firebase Realtime Database khi có mạng.
 
+CRUD được triển khai theo nguyên tắc sổ cái: mẫu áo, khách, xưởng và chi phí có thể sửa, tạm ẩn/hủy rồi khôi phục; đơn bán và phiếu nhập chỉ cho sửa metadata không làm đổi số tiền. Khi hủy giao dịch đã hoàn tất, ứng dụng tạo phát sinh kho, công nợ và thanh toán đảo chiều thay vì xóa lịch sử. Điều chỉnh tồn luôn cần lý do và tạo `StockMovement`.
+
 ## Kiến trúc
 
 - React + TypeScript strict + Vite; Bun workspace
@@ -65,7 +67,7 @@ bun run test:rules
 bun run build
 ```
 
-Unit tests bao phủ QR/checksum, tiền, giá vốn bình quân, báo cáo, conflict, changeset, cloud chunks và rollback transaction bán hàng. Playwright dùng camera-denial/manual fallback; Rules tests cần Realtime Database emulator.
+Unit tests bao phủ QR/checksum, tiền, giá vốn bình quân, báo cáo, conflict, changeset, cloud chunks, CRUD ledger-safe, hủy phiếu nhập và rollback transaction bán hàng. Playwright dùng camera-denial/manual fallback; Rules tests cần Realtime Database emulator.
 
 ## Build và deploy
 
@@ -87,6 +89,8 @@ Mở **Khác → Đồng bộ & Sao lưu**. Bản sao tải về chứa tất c�
 - QR chỉ là định danh có checksum, không phải authorization token và không chứa giá vốn, tồn hay UID.
 - Tiền lưu bằng integer VND; giá vốn lịch sử nằm trên từng sale line.
 - Completed sale không bị xóa; hủy/đổi/trả phải tạo stock movements đảo chiều.
+- Phiếu nhập đã hoàn tất cũng chỉ được hủy bằng xuất trả xưởng, giảm công nợ và payment hoàn tiền tương ứng.
+- Xóa ảnh sản phẩm/hóa đơn gỡ cả index và chunks RTDB; rules chỉ cho chính chủ tạo hoặc xóa, không cho ghi đè blob.
 
 ## Giới hạn đã biết
 

@@ -35,6 +35,7 @@ export interface CloudFileAdapter {
   upload(path: string, data: Uint8Array, contentType: string): Promise<void>;
   download(path: string): Promise<Uint8Array>;
   list(prefix: string): Promise<Array<{ path: string; updatedAt?: string }>>;
+  delete(path: string): Promise<void>;
 }
 
 export async function sha256(value: Uint8Array | string): Promise<string> {
@@ -304,5 +305,8 @@ export class MemoryCloudAdapter implements CloudFileAdapter {
     return [...this.files.keys()]
       .filter((path) => path.startsWith(prefix))
       .map((path) => ({ path }));
+  }
+  async delete(path: string): Promise<void> {
+    this.files.delete(path);
   }
 }
