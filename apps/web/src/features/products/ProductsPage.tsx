@@ -3,22 +3,14 @@ import { deleteCloudFile, hasFirebaseConfig, uploadProductImage } from "@pocket/
 import { db, getDeviceId, setProductActive, updateProduct } from "@pocket/local-db";
 import { Badge, Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
-import {
-  ChevronRight,
-  CirclePlus,
-  ImagePlus,
-  PackageOpen,
-  Pencil,
-  QrCode,
-  Shirt,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ChevronRight, CirclePlus, PackageOpen, Pencil, QrCode, Shirt, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../../app/AuthContext";
 import { formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
+import { CloudImage } from "../../components/CloudImage";
+import { ImageUploadField } from "../../components/ImageUploadField";
 import { useToast } from "../../components/Toast";
 import { EmptyState, PageHeader, SearchField } from "../../components/Ui";
 
@@ -36,6 +28,7 @@ export default function ProductsPage() {
   const [description, setDescription] = useState("");
   const [imageIds, setImageIds] = useState<string[]>([]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imageProgress, setImageProgress] = useState(0);
   const [variantDrafts, setVariantDrafts] = useState<
     Record<
       string,
@@ -68,6 +61,7 @@ export default function ProductsPage() {
     setDescription(current.description ?? "");
     setImageIds(current.imageIds);
     setImageFiles([]);
+    setImageProgress(0);
     setVariantDrafts(
       Object.fromEntries(
         own.map((variant) => [
@@ -89,20 +83,23 @@ export default function ProductsPage() {
     const own = variants.filter((variant) => variant.productId === product.id);
     const stock = own.reduce((sum, variant) => sum + variant.stockQuantity, 0);
     async function save() {
-      if (!activeShop) return;
+      if (!activeShop || busy) return;
       const uploadedPaths: string[] = [];
       setBusy(true);
       setError("");
+      setImageProgress(0);
       try {
         if (imageFiles.length) {
           if (!user || !hasFirebaseConfig())
             throw new Error("Cần đăng nhập Firebase để tải ảnh lên cloud.");
-          for (const file of imageFiles) {
+          for (const [index, file] of imageFiles.entries()) {
             const uploaded = await uploadProductImage({
               ownerUid: user.uid,
               shopId: activeShop.id,
               productId: currentProduct.id,
               file,
+              onProgress: (percent) =>
+                setImageProgress(Math.round(((index + percent / 100) / imageFiles.length) * 100)),
             });
             uploadedPaths.push(uploaded.path);
           }
@@ -132,6 +129,7 @@ export default function ProductsPage() {
               .map((path) => deleteCloudFile(user.uid, path)),
           );
         setError(toVietnameseError(cause));
+        setImageProgress(0);
       } finally {
         setBusy(false);
       }
@@ -166,7 +164,12 @@ export default function ProductsPage() {
         <div className="product-detail">
           <Card className="product-detail__hero">
             <span className="product-hero-art">
-              <Shirt />
+              <CloudImage
+                ownerUid={user && !user.isLocal ? user.uid : undefined}
+                path={product.imageIds[0]}
+                alt={product.name}
+                fallback={<Shirt />}
+              />
             </span>
             <div>
               <p>
@@ -265,7 +268,10 @@ export default function ProductsPage() {
                 type="button"
                 className="sheet-close"
                 aria-label="Đóng"
-                onClick={() => setEditing(false)}
+                disabled={busy}
+                onClick={() => {
+                  if (!busy) setEditing(false);
+                }}
               >
                 <X />
               </button>
@@ -296,31 +302,17 @@ export default function ProductsPage() {
                   />
                 </label>
               </div>
-              <div className="crud-image-list">
-                {imageIds.map((path) => (
-                  <div key={path}>
-                    <span>{path.split("/").at(-1)}</span>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setImageIds(imageIds.filter((item) => item !== path))}
-                    >
-                      <Trash2 /> Xóa ảnh
-                    </Button>
-                  </div>
-                ))}
-                <label className="file-button">
-                  <ImagePlus /> Thêm ảnh
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    onChange={(event) => setImageFiles([...(event.target.files ?? [])])}
-                  />
-                </label>
-                {imageFiles.length > 0 && (
-                  <small>{imageFiles.length} ảnh mới sẽ được tải lên khi lưu.</small>
-                )}
-              </div>
+              <ImageUploadField
+                files={imageFiles}
+                onFilesChange={setImageFiles}
+                existingPaths={imageIds}
+                onExistingPathsChange={setImageIds}
+                ownerUid={user && !user.isLocal ? user.uid : undefined}
+                disabled={busy}
+                label="Thêm ảnh sản phẩm"
+                progress={imageProgress}
+                compact
+              />
               <div className="crud-variant-editor">
                 {own.map((variant) => {
                   const draft = variantDrafts[variant.id];
@@ -454,7 +446,12 @@ export default function ProductsPage() {
               <Link to={`/products/${product.id}`} key={product.id}>
                 <Card>
                   <span className="product-card-art">
-                    <Shirt />
+                    <CloudImage
+                      ownerUid={user && !user.isLocal ? user.uid : undefined}
+                      path={product.imageIds[0]}
+                      alt={product.name}
+                      fallback={<Shirt />}
+                    />
                   </span>
                   <span>
                     <strong>{product.name}</strong>

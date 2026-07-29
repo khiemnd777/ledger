@@ -72,3 +72,26 @@ test("QR labels are generated before opening the system print dialog", async ({ 
     .poll(() => page.evaluate(() => document.documentElement.dataset.printInvoked))
     .toBe("true");
 });
+
+test("image picker rejects invalid files and previews a valid image", async ({ page }) => {
+  await openDemoShop(page);
+  await page.goto("/products/new");
+  await page.getByRole("button", { name: /Tiếp tục/ }).click();
+
+  const imageInput = page.getByLabel(/Chọn ảnh/);
+  await imageInput.setInputFiles({
+    name: "not-an-image.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("not-an-image"),
+  });
+  await expect(page.getByRole("alert")).toContainText("chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP");
+
+  await imageInput.setInputFiles({
+    name: "shirt.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+  });
+  await expect(page.getByAltText("Xem trước shirt.jpg")).toBeVisible();
+  await page.getByRole("button", { name: "Bỏ ảnh shirt.jpg" }).click();
+  await expect(page.getByAltText("Xem trước shirt.jpg")).toHaveCount(0);
+});

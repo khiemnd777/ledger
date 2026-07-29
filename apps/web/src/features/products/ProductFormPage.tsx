@@ -22,6 +22,7 @@ import { z } from "zod";
 import { useAuth } from "../../app/AuthContext";
 import { formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
+import { ImageUploadField } from "../../components/ImageUploadField";
 import { useToast } from "../../components/Toast";
 import { PageHeader } from "../../components/Ui";
 
@@ -93,13 +94,15 @@ export default function ProductFormPage() {
     .filter(Boolean);
   const variantCount = colors.length * sizes.length * necks.length;
   async function finish() {
-    if (!activeShop) return;
+    if (!activeShop || busy) return;
     const parsed = schema.safeParse(getValues());
     if (!parsed.success) {
       setError("Kiểm tra lại thông tin bắt buộc và giá bán.");
       setStep(0);
       return;
     }
+    setError("");
+    setImageProgress(0);
     setBusy(true);
     const productId = createId();
     const uploadedPaths: string[] = [];
@@ -143,6 +146,8 @@ export default function ProductFormPage() {
       if (user && hasFirebaseConfig())
         await Promise.allSettled(uploadedPaths.map((path) => deleteCloudFile(user.uid, path)));
       setError(toVietnameseError(cause));
+      setImageProgress(0);
+      if (imageFiles.length && uploadedPaths.length < imageFiles.length) setStep(1);
     } finally {
       setBusy(false);
     }
@@ -203,29 +208,19 @@ export default function ProductFormPage() {
             <section>
               <h2>Hình ảnh mẫu áo</h2>
               <p>Ảnh sẽ được nén WebP trước khi tải lên.</p>
-              <Card className="image-drop">
-                <ImagePlus />
-                <strong>Thêm ảnh sản phẩm</strong>
-                <span>JPG, PNG hoặc WebP · tối đa 8 MB</span>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  onChange={(event) => setImageFiles(Array.from(event.target.files ?? []))}
-                />
-              </Card>
-              {imageFiles.length > 0 && (
-                <div className="image-queue">
-                  <strong>{imageFiles.length} ảnh đã chọn</strong>
-                  <span>
-                    {imageProgress
-                      ? `Đã tải ${imageProgress}%`
-                      : hasFirebaseConfig()
-                        ? "Sẽ nén WebP và tải khi lưu"
-                        : "Cần cấu hình Firebase để tải ảnh"}
-                  </span>
-                </div>
-              )}
+              <ImageUploadField
+                files={imageFiles}
+                onFilesChange={setImageFiles}
+                disabled={busy}
+                label="Thêm ảnh sản phẩm"
+                helperText={
+                  hasFirebaseConfig()
+                    ? "JPEG, PNG hoặc WebP · tối đa 8 MB mỗi ảnh"
+                    : "Xem trước được hỗ trợ; cần đăng nhập Firebase để tải lên"
+                }
+                progress={imageProgress}
+              />
+              {error && <p className="form-error">{error}</p>}
               <p className="info-callout">
                 Bạn có thể bỏ qua và thêm ảnh sau trong chi tiết mẫu áo.
               </p>

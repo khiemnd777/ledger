@@ -44,6 +44,21 @@ describe("Realtime Database tenant isolation", () => {
     await assertSucceeds(get(ref(database, blobPath)));
   });
 
+  it("allows the product image upload contract", async () => {
+    const database = env.authenticatedContext("user-a").database();
+    await assertSucceeds(
+      update(ref(database), {
+        [indexPath]: {
+          ...validMetadata,
+          path: `users/user-a/shops/shop-a/product-images/product-a/${"c".repeat(64)}.webp`,
+          contentType: "image/webp",
+          byteSize: 4,
+        },
+        [blobPath]: { 0: "UklGRg==" },
+      }),
+    );
+  });
+
   it("denies cross-user read and write", async () => {
     await env.withSecurityRulesDisabled(async (context) => {
       await set(ref(context.database(), indexPath), validMetadata);

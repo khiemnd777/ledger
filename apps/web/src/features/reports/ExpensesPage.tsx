@@ -3,11 +3,13 @@ import { deleteCloudFile, hasFirebaseConfig, uploadExpenseAttachment } from "@po
 import { addExpense, db, getDeviceId, setExpenseActive, updateExpense } from "@pocket/local-db";
 import { Badge, Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
-import { CirclePlus, Paperclip, Pencil, Receipt, RotateCcw, Trash2, X } from "lucide-react";
+import { CirclePlus, Pencil, Receipt, RotateCcw, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "../../app/AuthContext";
 import { formatDateTime, formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
+import { CloudImage } from "../../components/CloudImage";
+import { ImageUploadField } from "../../components/ImageUploadField";
 import { useToast } from "../../components/Toast";
 import { PageHeader } from "../../components/Ui";
 
@@ -25,6 +27,8 @@ export default function ExpensesPage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const expenses =
     useLiveQuery(
@@ -45,6 +49,7 @@ export default function ExpensesPage() {
     setDate(new Date().toISOString().slice(0, 10));
     setAttachmentIds([]);
     setAttachmentFiles([]);
+    setUploadProgress(0);
     setError("");
     setSheet("add");
   }
@@ -56,25 +61,34 @@ export default function ExpensesPage() {
     setDate(expense.date.slice(0, 10));
     setAttachmentIds(expense.attachmentIds);
     setAttachmentFiles([]);
+    setUploadProgress(0);
     setError("");
     setSheet("edit");
   }
   async function submit() {
+    if (busy) return;
     const uploadedPaths: string[] = [];
     const previousAttachments =
       expenses.find((expense) => expense.id === selectedId)?.attachmentIds ?? [];
+    setBusy(true);
+    setError("");
+    setUploadProgress(0);
     try {
       if (amount <= 0) throw new Error("Nhập số tiền chi lớn hơn 0.");
       const expenseId = sheet === "edit" ? selectedId : createId();
       if (attachmentFiles.length) {
         if (!user || !hasFirebaseConfig())
           throw new Error("Cần đăng nhập Firebase để tải ảnh hóa đơn lên cloud.");
-        for (const file of attachmentFiles) {
+        for (const [index, file] of attachmentFiles.entries()) {
           const uploaded = await uploadExpenseAttachment({
             ownerUid: user.uid,
             shopId,
             expenseId,
             file,
+            onProgress: (percent) =>
+              setUploadProgress(
+                Math.round(((index + percent / 100) / attachmentFiles.length) * 100),
+              ),
           });
           uploadedPaths.push(uploaded.path);
         }
@@ -109,6 +123,7 @@ export default function ExpensesPage() {
       setSheet(null);
       setAmount(0);
       setNote("");
+      setAttachmentFiles([]);
     } catch (cause) {
       if (user && hasFirebaseConfig())
         await Promise.allSettled(
@@ -117,6 +132,9 @@ export default function ExpensesPage() {
             .map((path) => deleteCloudFile(user.uid, path)),
         );
       setError(toVietnameseError(cause));
+      setUploadProgress(0);
+    } finally {
+      setBusy(false);
     }
   }
   async function toggle(expense: (typeof expenses)[number]) {
@@ -182,7 +200,12 @@ export default function ExpensesPage() {
         {visible.map((expense) => (
           <Card key={expense.id}>
             <span className="expense-icon">
-              <Receipt />
+              <CloudImage
+                ownerUid={user && !user.isLocal ? user.uid : undefined}
+                path={expense.attachmentIds[0]}
+                alt={`Hóa đơn ${expense.category}`}
+                fallback={<Receipt />}
+              />
             </span>
             <span>
               <strong>{expense.category}</strong>
@@ -218,7 +241,10 @@ export default function ExpensesPage() {
               type="button"
               className="sheet-close"
               aria-label="Đóng"
-              onClick={() => setSheet(null)}
+              disabled={busy}
+              onClick={() => {
+                if (!busy) setSheet(null);
+              }}
             >
               <X />
             </button>
@@ -248,39 +274,24 @@ export default function ExpensesPage() {
                 Ngày chi
                 <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
               </label>
-              <label className="file-button">
-                <Paperclip />
-                Đính kèm ảnh hóa đơn
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  onChange={(event) => setAttachmentFiles([...(event.target.files ?? [])])}
+              <div className="span-full">
+                <ImageUploadField
+                  files={attachmentFiles}
+                  onFilesChange={setAttachmentFiles}
+                  existingPaths={attachmentIds}
+                  onExistingPathsChange={setAttachmentIds}
+                  ownerUid={user && !user.isLocal ? user.uid : undefined}
+                  disabled={busy}
+                  label="Đính kèm ảnh hóa đơn"
+                  progress={uploadProgress}
+                  compact
                 />
-              </label>
-              {attachmentIds.length > 0 && (
-                <div className="crud-image-list span-full">
-                  {attachmentIds.map((path) => (
-                    <div key={path}>
-                      <span>{path.split("/").at(-1)}</span>
-                      <Button
-                        variant="ghost"
-                        onClick={() =>
-                          setAttachmentIds(attachmentIds.filter((item) => item !== path))
-                        }
-                      >
-                        <Trash2 /> Xóa ảnh
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {attachmentFiles.length > 0 && (
-                <small>{attachmentFiles.length} ảnh mới sẽ được tải khi lưu.</small>
-              )}
+              </div>
             </div>
             {error && <p className="form-error">{error}</p>}
-            <Button onClick={submit}>{sheet === "edit" ? "Lưu thay đổi" : "Lưu chi phí"}</Button>
+            <Button onClick={submit} disabled={busy}>
+              {busy ? "Đang tải ảnh và lưu…" : sheet === "edit" ? "Lưu thay đổi" : "Lưu chi phí"}
+            </Button>
           </div>
         </div>
       )}
