@@ -1382,6 +1382,17 @@ input:disabled {
   width: 15px;
   vertical-align: middle;
 }
+.cart-heading__actions,
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cart-heading__actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 .cart-list,
 .order-panel {
   display: grid;
@@ -2633,6 +2644,29 @@ input:disabled {
   width: 170px;
   min-height: 40px;
 }
+.printer-help {
+  margin-bottom: 14px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  align-items: center;
+  gap: 11px;
+}
+.printer-help > span {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  color: var(--primary);
+  background: #eff6ff;
+  display: grid;
+  place-items: center;
+}
+.printer-help p {
+  margin: 4px 0 0;
+  color: var(--subtle);
+  font-size: 10px;
+  line-height: 1.5;
+}
 .switch-row {
   position: relative;
   display: flex;
@@ -2848,6 +2882,10 @@ input:disabled {
   padding-inline: 10px;
   justify-self: end;
   font-size: 10px;
+}
+.stock-list--selecting .button {
+  color: #fff;
+  background: var(--primary);
 }
 .matrix-controls {
   margin-bottom: 12px;
@@ -4225,6 +4263,7 @@ input:disabled {
   .page-header,
   .label-toolbar,
   .label-selector,
+  .printer-help,
   .connectivity {
     display: none;
   }

@@ -15,13 +15,17 @@ import {
   History,
   PackageOpen,
   PackagePlus,
+  Plus,
+  QrCode,
   RefreshCw,
   Search,
+  ShoppingBag,
   SlidersHorizontal,
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useCartStore } from "../../app/cartStore";
 import { formatDateTime, formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
 import { useToast } from "../../components/Toast";
@@ -30,11 +34,15 @@ import { PageHeader, SearchField } from "../../components/Ui";
 export default function InventoryPage() {
   const { activeShop } = useShop();
   const { show } = useToast();
+  const [searchParams] = useSearchParams();
+  const selectionMode = searchParams.get("mode") === "select";
   const shopId = activeShop?.id ?? "";
+  const { items: cartItems, addItem } = useCartStore();
+  const cartQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const [tab, setTab] = useState<"stock" | "matrix" | "history" | "check">("stock");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "low" | "out">(
-    new URLSearchParams(location.search).get("filter") === "low" ? "low" : "all",
+    searchParams.get("filter") === "low" ? "low" : "all",
   );
   const [productId, setProductId] = useState("");
   const [neck, setNeck] = useState("");
@@ -57,7 +65,8 @@ export default function InventoryPage() {
     [shopId],
     { variants: [], products: [], movements: [] },
   );
-  const names = new Map(data.products.map((p) => [p.id, p.name]));
+  const products = new Map(data.products.map((product) => [product.id, product]));
+  const names = new Map(data.products.map((product) => [product.id, product.name]));
   const total = data.variants.reduce((sum, v) => sum + v.stockQuantity, 0);
   const low = data.variants.filter(
     (v) => v.stockQuantity > 0 && v.stockQuantity <= v.lowStockThreshold,
@@ -65,6 +74,11 @@ export default function InventoryPage() {
   const out = data.variants.filter((v) => v.stockQuantity === 0).length;
   const value = data.variants.reduce((sum, v) => sum + v.stockQuantity * v.purchasePrice, 0);
   const filtered = data.variants
+    .filter((variant) => {
+      if (!selectionMode) return true;
+      const product = products.get(variant.productId);
+      return Boolean(product?.active && !product.deletedAt && variant.active && !variant.deletedAt);
+    })
     .filter((v) =>
       `${names.get(v.productId)} ${v.attributeSummary} ${v.sku}`
         .toLowerCase()
@@ -124,86 +138,114 @@ export default function InventoryPage() {
     }
   }
   const adjusting = data.variants.find((variant) => variant.id === adjustingId);
+  function addVariantToCart(variantId: string) {
+    const variant = data.variants.find((item) => item.id === variantId);
+    const product = variant ? products.get(variant.productId) : undefined;
+    if (!variant || !product) return;
+    if (variant.stockQuantity <= 0 && !activeShop?.allowNegativeStock) {
+      show(`${variant.sku} đã hết hàng`);
+      return;
+    }
+    addItem(variant, product);
+    show(`Đã thêm ${variant.sku} vào đơn`);
+  }
   return (
     <div>
       <PageHeader
-        title="Kho áo"
-        eyebrow="TỒN KHO THEO BIẾN THỂ"
+        title={selectionMode ? "Chọn áo vào đơn" : "Kho áo"}
+        eyebrow={selectionMode ? "CHỌN BIẾN THỂ TỪ KHO" : "TỒN KHO THEO BIẾN THỂ"}
         action={
-          <Link className="button button--primary compact-button" to="/receive">
-            <PackagePlus />
-            Nhập áo
-          </Link>
+          selectionMode ? (
+            <Link className="button button--primary compact-button" to="/sell">
+              <ShoppingBag />
+              Xem đơn ({cartQuantity})
+            </Link>
+          ) : (
+            <div className="page-header-actions">
+              <Link className="button button--secondary compact-button" to="/qr-labels">
+                <QrCode />
+                Tem QR
+              </Link>
+              <Link className="button button--primary compact-button" to="/receive">
+                <PackagePlus />
+                Nhập áo
+              </Link>
+            </div>
+          )
         }
       />
-      <div className="inventory-stats">
-        <Card>
-          <span>
+      {!selectionMode && (
+        <div className="inventory-stats">
+          <Card>
+            <span>
+              <Boxes />
+            </span>
+            <div>
+              <small>Tổng tồn</small>
+              <strong>{total} áo</strong>
+            </div>
+          </Card>
+          <Card>
+            <span className="amber">
+              <AlertTriangle />
+            </span>
+            <div>
+              <small>Sắp hết</small>
+              <strong>{low} biến thể</strong>
+            </div>
+          </Card>
+          <Card>
+            <span className="red">
+              <PackageOpen />
+            </span>
+            <div>
+              <small>Hết hàng</small>
+              <strong>{out} biến thể</strong>
+            </div>
+          </Card>
+          <Card>
+            <span className="green">
+              <ClipboardCheck />
+            </span>
+            <div>
+              <small>Giá trị kho</small>
+              <strong>{formatMoney(value)}</strong>
+            </div>
+          </Card>
+        </div>
+      )}
+      {!selectionMode && (
+        <div className="tabs">
+          <button
+            type="button"
+            onClick={() => setTab("stock")}
+            className={tab === "stock" ? "is-active" : ""}
+          >
             <Boxes />
-          </span>
-          <div>
-            <small>Tổng tồn</small>
-            <strong>{total} áo</strong>
-          </div>
-        </Card>
-        <Card>
-          <span className="amber">
-            <AlertTriangle />
-          </span>
-          <div>
-            <small>Sắp hết</small>
-            <strong>{low} biến thể</strong>
-          </div>
-        </Card>
-        <Card>
-          <span className="red">
-            <PackageOpen />
-          </span>
-          <div>
-            <small>Hết hàng</small>
-            <strong>{out} biến thể</strong>
-          </div>
-        </Card>
-        <Card>
-          <span className="green">
-            <ClipboardCheck />
-          </span>
-          <div>
-            <small>Giá trị kho</small>
-            <strong>{formatMoney(value)}</strong>
-          </div>
-        </Card>
-      </div>
-      <div className="tabs">
-        <button
-          type="button"
-          onClick={() => setTab("stock")}
-          className={tab === "stock" ? "is-active" : ""}
-        >
-          <Boxes />
-          Hiện tại
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("matrix")}
-          className={tab === "matrix" ? "is-active" : ""}
-        >
-          <Search />
-          Ma trận
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("history")}
-          className={tab === "history" ? "is-active" : ""}
-        >
-          <History />
-          Lịch sử kho
-        </button>
-        <button type="button" onClick={runCheck} className={tab === "check" ? "is-active" : ""}>
-          <CheckCircle2 />
-          Kiểm tra
-        </button>
-      </div>
+            Hiện tại
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("matrix")}
+            className={tab === "matrix" ? "is-active" : ""}
+          >
+            <Search />
+            Ma trận
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("history")}
+            className={tab === "history" ? "is-active" : ""}
+          >
+            <History />
+            Lịch sử kho
+          </button>
+          <button type="button" onClick={runCheck} className={tab === "check" ? "is-active" : ""}>
+            <CheckCircle2 />
+            Kiểm tra
+          </button>
+        </div>
+      )}
       {tab === "stock" && (
         <>
           <div className="toolbar">
@@ -232,7 +274,7 @@ export default function InventoryPage() {
               </button>
             </div>
           </div>
-          <div className="stock-list">
+          <div className={`stock-list ${selectionMode ? "stock-list--selecting" : ""}`}>
             {filtered.map((variant) => (
               <Card key={variant.id}>
                 <span className="product-swatch">
@@ -254,8 +296,8 @@ export default function InventoryPage() {
                   </b>
                 </span>
                 <span>
-                  <small>Giá vốn</small>
-                  <b>{formatMoney(variant.purchasePrice)}</b>
+                  <small>{selectionMode ? "Giá bán" : "Giá vốn"}</small>
+                  <b>{formatMoney(selectionMode ? variant.salePrice : variant.purchasePrice)}</b>
                 </span>
                 <Badge
                   tone={
@@ -272,17 +314,32 @@ export default function InventoryPage() {
                       ? "Sắp hết"
                       : "Ổn"}
                 </Badge>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setAdjustingId(variant.id);
-                    setQuantityDelta(0);
-                    setReason("");
-                    setError("");
-                  }}
-                >
-                  <SlidersHorizontal /> Điều chỉnh
-                </Button>
+                {selectionMode ? (
+                  <Button
+                    aria-label={`Thêm ${names.get(variant.productId)} ${variant.attributeSummary} vào đơn`}
+                    disabled={variant.stockQuantity <= 0 && !activeShop?.allowNegativeStock}
+                    onClick={() => addVariantToCart(variant.id)}
+                  >
+                    <Plus />
+                    {cartItems.find((item) => item.variant.id === variant.id)
+                      ? `Thêm nữa · ${cartItems.find((item) => item.variant.id === variant.id)?.quantity}`
+                      : variant.stockQuantity <= 0 && !activeShop?.allowNegativeStock
+                        ? "Hết hàng"
+                        : "Thêm vào đơn"}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setAdjustingId(variant.id);
+                      setQuantityDelta(0);
+                      setReason("");
+                      setError("");
+                    }}
+                  >
+                    <SlidersHorizontal /> Điều chỉnh
+                  </Button>
+                )}
               </Card>
             ))}
           </div>

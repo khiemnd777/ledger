@@ -35,3 +35,40 @@ test("camera denial keeps manual SKU fallback available", async ({ page }) => {
   await page.getByRole("button", { name: /Nhập SKU/ }).click();
   await expect(page.getByPlaceholder(/ATB-001/)).toBeVisible();
 });
+
+test("choosing a variant from inventory adds it to the sale", async ({ page }) => {
+  await openDemoShop(page);
+  await page.goto("/sell");
+  await page.getByRole("link", { name: /Chọn từ kho áo/ }).click();
+
+  await expect(page).toHaveURL(/\/inventory\?mode=select$/);
+  await expect(page.getByRole("heading", { name: "Chọn áo vào đơn" })).toBeVisible();
+  await page
+    .getByRole("button", { name: /Thêm .+ vào đơn/ })
+    .first()
+    .click();
+  await expect(page.getByRole("link", { name: "Xem đơn (1)" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Xem đơn (1)" }).click();
+  await expect(page.getByRole("heading", { name: "1 biến thể trong đơn" })).toBeVisible();
+});
+
+test("QR labels are generated before opening the system print dialog", async ({ page }) => {
+  await openDemoShop(page);
+  await page.goto("/inventory");
+  await page.getByRole("link", { name: "Tem QR" }).click();
+
+  await expect(page.getByRole("heading", { name: "Tem QR" })).toBeVisible();
+  await expect(page.getByText("In trực tiếp bằng máy in hệ thống")).toBeVisible();
+  await page.evaluate(() => {
+    window.print = () => {
+      document.documentElement.dataset.printInvoked = "true";
+    };
+  });
+  const printButton = page.getByRole("button", { name: "In tem" });
+  await expect(printButton).toBeEnabled();
+  await printButton.click();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.printInvoked))
+    .toBe("true");
+});

@@ -9,6 +9,7 @@ import { Badge, Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   Banknote,
+  Boxes,
   ChevronRight,
   Minus,
   PackageOpen,
@@ -126,7 +127,7 @@ export default function SellPage() {
             <ScanLine />
             Quét QR để bán
           </Link>
-          <Link className="text-link" to="/inventory">
+          <Link className="text-link" to="/inventory?mode=select">
             Chọn từ kho áo <ChevronRight />
           </Link>
         </Card>
@@ -135,9 +136,14 @@ export default function SellPage() {
           <section>
             <div className="cart-heading">
               <h2>{items.length} biến thể trong đơn</h2>
-              <Link to="/scan">
-                <ScanLine /> Quét thêm
-              </Link>
+              <div className="cart-heading__actions">
+                <Link to="/inventory?mode=select">
+                  <Boxes /> Chọn từ kho
+                </Link>
+                <Link to="/scan">
+                  <ScanLine /> Quét thêm
+                </Link>
+              </div>
             </div>
             <div className="cart-list">
               {items.map((item) => (

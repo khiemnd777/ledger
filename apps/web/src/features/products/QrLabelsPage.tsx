@@ -2,7 +2,7 @@ import { db } from "@pocket/local-db";
 import { generateQrDataUrl } from "@pocket/qr";
 import { Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
-import { CheckSquare, Printer, QrCode, Square } from "lucide-react";
+import { CheckSquare, Printer, QrCode, Square, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { formatMoney } from "../../app/format";
@@ -51,6 +51,8 @@ export default function QrLabelsPage() {
     };
   }, [selected.join(","), data.variants.length]);
   const names = new Map(data.products.map((product) => [product.id, product.name]));
+  const readyToPrint =
+    selected.length > 0 && selected.every((variantId) => Boolean(images[variantId]));
   return (
     <div className={`labels-page labels-page--${layout}`}>
       <PageHeader
@@ -58,9 +60,9 @@ export default function QrLabelsPage() {
         eyebrow={`${selected.length} BIẾN THỂ ĐÃ CHỌN`}
         back
         action={
-          <Button onClick={() => window.print()}>
+          <Button disabled={!readyToPrint} onClick={() => window.print()}>
             <Printer />
-            In tem
+            {selected.length > 0 && !readyToPrint ? "Đang tạo QR…" : "In tem"}
           </Button>
         }
       />
@@ -91,6 +93,18 @@ export default function QrLabelsPage() {
           />
           <i />
         </label>
+      </Card>
+      <Card className="printer-help">
+        <span>
+          <Wifi />
+        </span>
+        <div>
+          <strong>In trực tiếp bằng máy in hệ thống</strong>
+          <p>
+            QR được sinh tự động cho từng biến thể. Trên iPhone, chọn máy in AirPrint; trên máy
+            tính, chọn máy in thường hoặc máy in nhiệt 50 × 30 mm trong hộp thoại in.
+          </p>
+        </div>
       </Card>
       <div className="label-selector">
         {data.variants.map((variant) => (
