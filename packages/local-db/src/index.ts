@@ -1899,7 +1899,11 @@ export async function repairInventory(
 
 export async function seedDemoData(shopId: string, deviceId: string) {
   const existing = await db.products.where("shopId").equals(shopId).count();
-  if (existing > 0) return;
+  if (existing > 0) {
+    const shop = await db.shops.get(shopId);
+    if (shop && !shop.onboardingComplete) await db.shops.put({ ...shop, onboardingComplete: true });
+    return;
+  }
   const productInputs: Array<Omit<CreateProductInput, "shopId" | "deviceId">> = [
     {
       name: "Áo thun nữ basic",

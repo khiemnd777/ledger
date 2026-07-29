@@ -40,6 +40,8 @@ function Guard({ children }: { children: React.ReactNode }) {
   if (!user) return <Navigate to="/auth" replace state={{ from: location.pathname }} />;
   if (!activeShop && location.pathname !== "/onboarding")
     return <Navigate to="/onboarding" replace />;
+  if (activeShop?.onboardingComplete && location.pathname === "/onboarding")
+    return <Navigate to="/" replace />;
   return children;
 }
 

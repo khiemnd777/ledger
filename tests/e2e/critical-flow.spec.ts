@@ -18,6 +18,14 @@ async function openDemoShop(page: import("@playwright/test").Page) {
 test("local onboarding creates demo shop and opens mobile overview", async ({ page }) => {
   await openDemoShop(page);
   await expect(page.getByRole("main").getByText("Pocket Store 01")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("main").getByText("Pocket Store 01")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Bán đúng áo/ })).toHaveCount(0);
+
+  await page.goto("/onboarding");
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("main").getByText("Pocket Store 01")).toBeVisible();
 });
 
 test("camera denial keeps manual SKU fallback available", async ({ page }) => {

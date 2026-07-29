@@ -18,16 +18,35 @@ interface ShopContextValue {
   loading: boolean;
 }
 
+interface OwnedShopsResult {
+  ownerUid: string | null;
+  shops: Shop[];
+}
+
+export function resolveOwnedShops(
+  ownerUid: string | undefined,
+  result: OwnedShopsResult | undefined,
+) {
+  if (!ownerUid) return { shops: [] as Shop[], loading: false };
+  if (!result || result.ownerUid !== ownerUid) return { shops: [] as Shop[], loading: true };
+  return { shops: result.shops, loading: false };
+}
+
 const ShopContext = createContext<ShopContextValue | null>(null);
 
 export function ShopProvider({ children }: PropsWithChildren) {
   const { user } = useAuth();
-  const shopsResult = useLiveQuery<Shop[]>(
-    () =>
-      user ? db.shops.where("ownerUid").equals(user.uid).toArray() : Promise.resolve([] as Shop[]),
-    [user?.uid],
+  const ownerUid = user?.uid;
+  // Dexie keeps the previous live-query value while dependencies resubscribe.
+  // Stamp each result so a signed-out result cannot be mistaken for this user's shops.
+  const shopsResult = useLiveQuery<OwnedShopsResult>(
+    async () => ({
+      ownerUid: ownerUid ?? null,
+      shops: ownerUid ? await db.shops.where("ownerUid").equals(ownerUid).toArray() : [],
+    }),
+    [ownerUid],
   );
-  const shops = shopsResult ?? [];
+  const { shops, loading } = resolveOwnedShops(ownerUid, shopsResult);
   const [activeShopId, setActiveShopIdState] = useState(() =>
     localStorage.getItem("pocket-active-shop"),
   );
@@ -37,20 +56,22 @@ export function ShopProvider({ children }: PropsWithChildren) {
     void requestPersistentStorage();
   }, []);
   useEffect(() => {
-    if (!activeShopId && shops[0]) setActiveShopIdState(shops[0].id);
-  }, [shops, activeShopId]);
+    if (!activeShop || activeShop.id === activeShopId) return;
+    localStorage.setItem("pocket-active-shop", activeShop.id);
+    setActiveShopIdState(activeShop.id);
+  }, [activeShop, activeShopId]);
 
   const value = useMemo(
     () => ({
       shops,
       activeShop,
-      loading: user !== null && shopsResult === undefined,
+      loading,
       setActiveShopId: (id: string) => {
         localStorage.setItem("pocket-active-shop", id);
         setActiveShopIdState(id);
       },
     }),
-    [shops, activeShop, shopsResult],
+    [shops, activeShop, loading],
   );
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;
 }
