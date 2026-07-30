@@ -18,6 +18,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useCartStore } from "../../app/cartStore";
 import { formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
+import { alertVariantNote } from "../../app/variantNote";
 
 function feedback() {
   navigator.vibrate?.(70);
@@ -62,6 +63,7 @@ export default function ScannerPage() {
       const variant = await resolveVariant(activeShop.id, lookup);
       const product = await db.products.get(variant.productId);
       if (!product) throw new Error("Không tìm thấy mẫu áo.");
+      alertVariantNote(variant.note);
       addItem(variant, product);
       setResult({ variant, product });
       setError("");

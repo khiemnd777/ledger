@@ -4,7 +4,7 @@ Mọi entity business có `id`, `shopId`, created/updated timestamps, device IDs
 
 ## Catalog
 
-`Product` là mẫu áo. `ProductAttribute` và `ProductAttributeValue` mô tả Size, Màu, Kiểu cổ… `ProductVariant` là đơn vị bán và tồn độc lập, luôn có SKU, QR, giá, tồn và ngưỡng sắp hết.
+`Product` là mẫu áo. `ProductAttribute` và `ProductAttributeValue` mô tả Size, Màu, Kiểu cổ… `ProductVariant` là đơn vị bán và tồn độc lập, luôn có SKU, QR, giá, tồn và ngưỡng sắp hết; ghi chú tùy chọn trên biến thể được dùng để cảnh báo khi chọn đúng áo để bán.
 
 ## Giao dịch
 

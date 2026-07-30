@@ -53,6 +53,74 @@ test("choosing a variant from inventory adds it to the sale", async ({ page }) =
   await expect(page.getByRole("heading", { name: "1 biến thể trong đơn" })).toBeVisible();
 });
 
+test("stock quantity can be edited directly from an inventory row", async ({ page }) => {
+  await openDemoShop(page);
+  await page.goto("/inventory");
+
+  const stockTrigger = page
+    .getByRole("button", { name: /Tồn \d+ áo\. Nhấp đúp để chỉnh tồn/ })
+    .first();
+  const currentQuantity = Number(await stockTrigger.textContent());
+  const nextQuantity = currentQuantity + 3;
+
+  await stockTrigger.dblclick();
+  const stockInput = page.getByRole("spinbutton", { name: /Tồn mới của/ });
+  await expect(stockInput).toHaveValue(String(currentQuantity));
+  await stockInput.fill(String(nextQuantity));
+  await stockInput.press("Enter");
+
+  await expect(page.getByText(/Đã cập nhật tồn .+: \d+ áo/)).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: new RegExp(`Tồn ${nextQuantity} áo\\. Nhấp đúp để chỉnh tồn`),
+    }),
+  ).toBeVisible();
+});
+
+test("variant note is shown when the exact shirt is selected or scanned for sale", async ({
+  page,
+}) => {
+  await openDemoShop(page);
+  await page.goto("/inventory");
+
+  const firstRow = page.locator(".stock-list > .card").first();
+  const sku = (await firstRow.locator("code").textContent())?.trim();
+  if (!sku) throw new Error("Demo variant did not expose its SKU");
+  await firstRow.getByRole("button", { name: /Ghi chú/ }).click();
+  await page.getByRole("textbox", { name: "Ghi chú" }).fill("áo bán cho khách A");
+  await page.getByRole("button", { name: "Lưu ghi chú" }).click();
+  await expect(page.getByText(/Đã lưu ghi chú/)).toBeVisible();
+
+  await page.goto("/inventory?mode=select");
+  const selectedNote = new Promise<string>((resolve) => {
+    page.once("dialog", async (dialog) => {
+      const message = dialog.message();
+      await dialog.accept();
+      resolve(message);
+    });
+  });
+  await page
+    .getByRole("button", { name: /Thêm .+ vào đơn/ })
+    .first()
+    .click();
+  await expect(selectedNote).resolves.toBe("Ghi chú: áo bán cho khách A");
+  await expect(page.getByRole("link", { name: "Xem đơn (1)" })).toBeVisible();
+
+  await page.goto("/scan");
+  await page.getByRole("button", { name: /Nhập SKU/ }).click();
+  await page.getByPlaceholder(/ATB-001/).fill(sku);
+  const scannedNote = new Promise<string>((resolve) => {
+    page.once("dialog", async (dialog) => {
+      const message = dialog.message();
+      await dialog.accept();
+      resolve(message);
+    });
+  });
+  await page.getByRole("button", { name: "Thêm vào đơn" }).click();
+  await expect(scannedNote).resolves.toBe("Ghi chú: áo bán cho khách A");
+  await expect(page.getByText("ĐÃ THÊM VÀO ĐƠN")).toBeVisible();
+});
+
 test("QR labels are generated before opening the system print dialog", async ({ page }) => {
   await openDemoShop(page);
   await page.goto("/inventory");

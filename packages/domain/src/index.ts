@@ -76,6 +76,7 @@ export interface ProductVariant extends EntityMeta {
   sku: string;
   qrValue: string;
   barcode?: string;
+  note?: string;
   attributeValueIds: Id[];
   attributeSummary: string;
   purchasePrice: number;

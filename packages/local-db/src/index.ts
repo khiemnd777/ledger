@@ -442,6 +442,37 @@ export async function updateProduct(input: UpdateProductInput) {
   });
 }
 
+export async function updateVariantNote(input: {
+  shopId: string;
+  deviceId: string;
+  variantId: string;
+  note?: string;
+}) {
+  return db.transaction("rw", [db.variants, db.auditLogs, db.outbox], async () => {
+    const variant = await db.variants.get(input.variantId);
+    if (!variant || variant.shopId !== input.shopId)
+      throw new PocketError(
+        "VARIANT_MISSING",
+        "Không tìm thấy biến thể cần ghi chú.",
+        "Tải lại kho rồi thử lại.",
+      );
+    const note = input.note?.trim() || undefined;
+    const updated = touch({ ...variant, note }, input.deviceId);
+    await db.variants.put(updated);
+    await db.auditLogs.add(
+      makeAudit(
+        updated,
+        note ? "variant.note_updated" : "variant.note_cleared",
+        "variant",
+        note ? `Đã cập nhật ghi chú ${variant.sku}` : `Đã xóa ghi chú ${variant.sku}`,
+        { note },
+      ),
+    );
+    await db.outbox.add(makeOutbox(updated, "variant", updated));
+    return updated;
+  });
+}
+
 export async function setProductActive(
   shopId: string,
   deviceId: string,

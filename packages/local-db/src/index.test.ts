@@ -19,6 +19,7 @@ import {
   updateProduct,
   updatePurchaseDetails,
   updateSaleDetails,
+  updateVariantNote,
 } from "./index";
 
 const deviceId = "device-test";
@@ -161,6 +162,41 @@ describe("atomic sale completion", () => {
 });
 
 describe("ledger-safe CRUD", () => {
+  it("stores and clears a sale note on an exact product variant", async () => {
+    const { shop, variant } = await fixture();
+    const updated = await updateVariantNote({
+      shopId: shop.id,
+      deviceId,
+      variantId: variant.id,
+      note: "  Áo bán cho khách A  ",
+    });
+
+    expect(updated.note).toBe("Áo bán cho khách A");
+    expect((await db.variants.get(variant.id))?.note).toBe("Áo bán cho khách A");
+    expect(
+      (await db.auditLogs.toArray()).some(
+        (entry) => entry.entityId === variant.id && entry.action === "variant.note_updated",
+      ),
+    ).toBe(true);
+    expect(
+      (await db.outbox.toArray()).some(
+        (event) =>
+          event.entityId === variant.id &&
+          event.action === "update" &&
+          event.entityRevision === updated.revision,
+      ),
+    ).toBe(true);
+
+    const cleared = await updateVariantNote({
+      shopId: shop.id,
+      deviceId,
+      variantId: variant.id,
+      note: " ",
+    });
+    expect(cleared.note).toBeUndefined();
+    expect((await db.variants.get(variant.id))?.note).toBeUndefined();
+  });
+
   it("updates and deactivates a product together with its variants", async () => {
     const { shop, product, variant } = await fixture();
     const result = await updateProduct({

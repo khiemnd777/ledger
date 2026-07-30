@@ -4,6 +4,7 @@ import {
   getDeviceId,
   getInventoryConsistency,
   repairInventory,
+  updateVariantNote,
 } from "@pocket/local-db";
 import { Badge, Button, Card } from "@pocket/ui";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -20,16 +21,18 @@ import {
   RefreshCw,
   Search,
   ShoppingBag,
-  SlidersHorizontal,
+  StickyNote,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../../app/cartStore";
 import { formatDateTime, formatMoney, toVietnameseError } from "../../app/format";
 import { useShop } from "../../app/ShopContext";
+import { alertVariantNote } from "../../app/variantNote";
 import { useToast } from "../../components/Toast";
 import { PageHeader, SearchField } from "../../components/Ui";
+import { getStockAdjustmentDelta, QUICK_STOCK_ADJUSTMENT_REASON } from "./inventory.utils";
 
 export default function InventoryPage() {
   const { activeShop } = useShop();
@@ -47,10 +50,15 @@ export default function InventoryPage() {
   const [productId, setProductId] = useState("");
   const [neck, setNeck] = useState("");
   const [checks, setChecks] = useState<Awaited<ReturnType<typeof getInventoryConsistency>>>();
-  const [adjustingId, setAdjustingId] = useState("");
-  const [quantityDelta, setQuantityDelta] = useState(0);
-  const [reason, setReason] = useState("");
-  const [error, setError] = useState("");
+  const [editingStockId, setEditingStockId] = useState("");
+  const [draftStockQuantity, setDraftStockQuantity] = useState("");
+  const [savingStockId, setSavingStockId] = useState("");
+  const [stockEditError, setStockEditError] = useState("");
+  const [notingVariantId, setNotingVariantId] = useState("");
+  const [draftVariantNote, setDraftVariantNote] = useState("");
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteError, setNoteError] = useState("");
+  const stockInputRef = useRef<HTMLInputElement>(null);
   const data = useLiveQuery(
     async () => ({
       variants: await db.variants.where("shopId").equals(shopId).toArray(),
@@ -98,6 +106,7 @@ export default function InventoryPage() {
   const sizes = [...new Set(parts.map((p) => p[1]).filter(Boolean))];
   const necks = [...new Set(parts.map((p) => p[2]).filter(Boolean))];
   const selectedNeck = neck || necks[0];
+  const notingVariant = data.variants.find((variant) => variant.id === notingVariantId);
   async function runCheck() {
     setChecks(await getInventoryConsistency(shopId));
     setTab("check");
@@ -118,26 +127,76 @@ export default function InventoryPage() {
     setChecks(await getInventoryConsistency(shopId));
     show("Đã sửa tồn cache và lưu lịch sử");
   }
-  async function submitAdjustment() {
-    if (!adjustingId) return;
+  function beginStockEdit(variantId: string, stockQuantity: number) {
+    if (savingStockId) return;
+    setEditingStockId(variantId);
+    setDraftStockQuantity(String(stockQuantity));
+    setStockEditError("");
+  }
+  function cancelStockEdit() {
+    if (savingStockId) return;
+    setEditingStockId("");
+    setDraftStockQuantity("");
+    setStockEditError("");
+  }
+  useEffect(() => {
+    if (!editingStockId) return;
+    stockInputRef.current?.focus();
+    stockInputRef.current?.select();
+  }, [editingStockId]);
+  async function submitStockEdit(variantId: string, currentQuantity: number) {
+    if (savingStockId) return;
     try {
+      const quantityDelta = getStockAdjustmentDelta(currentQuantity, draftStockQuantity);
+      if (quantityDelta === 0) {
+        cancelStockEdit();
+        return;
+      }
+      setSavingStockId(variantId);
+      setStockEditError("");
       const result = await adjustStock({
         shopId,
         deviceId: getDeviceId(),
-        variantId: adjustingId,
+        variantId,
         quantityDelta,
-        reason,
+        reason: QUICK_STOCK_ADJUSTMENT_REASON,
       });
-      show(`Đã điều chỉnh tồn ${result.variant.sku}`);
-      setAdjustingId("");
-      setQuantityDelta(0);
-      setReason("");
-      setError("");
+      show(`Đã cập nhật tồn ${result.variant.sku}: ${result.variant.stockQuantity} áo`);
+      setEditingStockId("");
+      setDraftStockQuantity("");
     } catch (cause) {
-      setError(toVietnameseError(cause));
+      const message = toVietnameseError(cause);
+      setStockEditError(message);
+      show(message, "error");
+    } finally {
+      setSavingStockId("");
     }
   }
-  const adjusting = data.variants.find((variant) => variant.id === adjustingId);
+  function openVariantNote(variantId: string, note?: string) {
+    setNotingVariantId(variantId);
+    setDraftVariantNote(note ?? "");
+    setNoteError("");
+  }
+  async function saveVariantNote() {
+    if (!notingVariant || noteBusy) return;
+    setNoteBusy(true);
+    setNoteError("");
+    try {
+      const updated = await updateVariantNote({
+        shopId,
+        deviceId: getDeviceId(),
+        variantId: notingVariant.id,
+        note: draftVariantNote,
+      });
+      show(updated.note ? `Đã lưu ghi chú ${updated.sku}` : `Đã xóa ghi chú ${updated.sku}`);
+      setNotingVariantId("");
+      setDraftVariantNote("");
+    } catch (cause) {
+      setNoteError(toVietnameseError(cause));
+    } finally {
+      setNoteBusy(false);
+    }
+  }
   function addVariantToCart(variantId: string) {
     const variant = data.variants.find((item) => item.id === variantId);
     const product = variant ? products.get(variant.productId) : undefined;
@@ -146,6 +205,7 @@ export default function InventoryPage() {
       show(`${variant.sku} đã hết hàng`);
       return;
     }
+    alertVariantNote(variant.note);
     addItem(variant, product);
     show(`Đã thêm ${variant.sku} vào đơn`);
   }
@@ -285,15 +345,67 @@ export default function InventoryPage() {
                   <small>{variant.attributeSummary}</small>
                   <code>{variant.sku}</code>
                 </span>
-                <span>
+                <span className="stock-quantity-cell">
                   <small>Tồn</small>
-                  <b
-                    className={
-                      variant.stockQuantity <= variant.lowStockThreshold ? "text-warning" : ""
-                    }
-                  >
-                    {variant.stockQuantity}
-                  </b>
+                  {!selectionMode && editingStockId === variant.id ? (
+                    <input
+                      type="number"
+                      ref={stockInputRef}
+                      step="1"
+                      inputMode="numeric"
+                      className="stock-quantity-input"
+                      aria-label={`Tồn mới của ${names.get(variant.productId)} ${variant.attributeSummary}`}
+                      aria-invalid={Boolean(stockEditError)}
+                      aria-busy={savingStockId === variant.id}
+                      title={stockEditError || "Nhấn Enter để lưu, Escape để hủy"}
+                      value={draftStockQuantity}
+                      readOnly={savingStockId === variant.id}
+                      onChange={(event) => {
+                        setDraftStockQuantity(event.target.value);
+                        setStockEditError("");
+                      }}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onBlur={() => {
+                        if (savingStockId !== variant.id) cancelStockEdit();
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void submitStockEdit(variant.id, variant.stockQuantity);
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelStockEdit();
+                        }
+                      }}
+                    />
+                  ) : selectionMode ? (
+                    <b
+                      className={
+                        variant.stockQuantity <= variant.lowStockThreshold ? "text-warning" : ""
+                      }
+                    >
+                      {variant.stockQuantity}
+                    </b>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`stock-quantity-trigger ${
+                        variant.stockQuantity <= variant.lowStockThreshold ? "text-warning" : ""
+                      }`}
+                      aria-label={`Tồn ${variant.stockQuantity} áo. Nhấp đúp để chỉnh tồn ${names.get(variant.productId)} ${variant.attributeSummary}`}
+                      title="Nhấp đúp để chỉnh tồn"
+                      onDoubleClick={() => beginStockEdit(variant.id, variant.stockQuantity)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          beginStockEdit(variant.id, variant.stockQuantity);
+                        }
+                      }}
+                    >
+                      {variant.stockQuantity}
+                    </button>
+                  )}
                 </span>
                 <span>
                   <small>{selectionMode ? "Giá bán" : "Giá vốn"}</small>
@@ -314,7 +426,7 @@ export default function InventoryPage() {
                       ? "Sắp hết"
                       : "Ổn"}
                 </Badge>
-                {selectionMode ? (
+                {selectionMode && (
                   <Button
                     aria-label={`Thêm ${names.get(variant.productId)} ${variant.attributeSummary} vào đơn`}
                     disabled={variant.stockQuantity <= 0 && !activeShop?.allowNegativeStock}
@@ -327,17 +439,15 @@ export default function InventoryPage() {
                         ? "Hết hàng"
                         : "Thêm vào đơn"}
                   </Button>
-                ) : (
+                )}
+                {!selectionMode && (
                   <Button
                     variant="ghost"
-                    onClick={() => {
-                      setAdjustingId(variant.id);
-                      setQuantityDelta(0);
-                      setReason("");
-                      setError("");
-                    }}
+                    className={`variant-note-button ${variant.note ? "has-note" : ""}`}
+                    aria-label={`Ghi chú ${names.get(variant.productId)} ${variant.attributeSummary}`}
+                    onClick={() => openVariantNote(variant.id, variant.note)}
                   >
-                    <SlidersHorizontal /> Điều chỉnh
+                    <StickyNote /> Ghi chú
                   </Button>
                 )}
               </Card>
@@ -493,44 +603,44 @@ export default function InventoryPage() {
           )}
         </section>
       )}
-      {adjusting && (
+      {notingVariant && (
         <div className="sheet-backdrop">
           <div className="bottom-sheet">
             <button
               type="button"
               className="sheet-close"
               aria-label="Đóng"
-              onClick={() => setAdjustingId("")}
+              disabled={noteBusy}
+              onClick={() => setNotingVariantId("")}
             >
               <X />
             </button>
-            <h2>Điều chỉnh tồn kho</h2>
+            <h2>Ghi chú áo</h2>
             <p>
-              {names.get(adjusting.productId)} · {adjusting.attributeSummary} · hiện có{" "}
-              {adjusting.stockQuantity} áo
+              {names.get(notingVariant.productId)} · {notingVariant.attributeSummary} ·{" "}
+              {notingVariant.sku}
             </p>
             <div className="form-card">
               <label>
-                Số lượng thay đổi
-                <input
-                  type="number"
-                  step="1"
-                  value={quantityDelta}
-                  onChange={(event) => setQuantityDelta(Number(event.target.value))}
-                />
-                <small>Nhập số dương để tăng, số âm để giảm.</small>
-              </label>
-              <label>
-                Lý do
+                Ghi chú
                 <textarea
-                  rows={3}
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
+                  rows={4}
+                  value={draftVariantNote}
+                  onChange={(event) => setDraftVariantNote(event.target.value)}
+                  placeholder="VD: Áo bán cho khách A"
+                  disabled={noteBusy}
                 />
+                <small>Ghi chú sẽ được báo khi biến thể này được chọn bán.</small>
               </label>
             </div>
-            {error && <p className="form-error">{error}</p>}
-            <Button onClick={submitAdjustment}>Lưu phát sinh điều chỉnh</Button>
+            {noteError && (
+              <p className="form-error" role="alert">
+                {noteError}
+              </p>
+            )}
+            <Button onClick={() => void saveVariantNote()} disabled={noteBusy}>
+              {noteBusy ? "Đang lưu…" : "Lưu ghi chú"}
+            </Button>
           </div>
         </div>
       )}

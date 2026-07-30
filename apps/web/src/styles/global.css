@@ -3054,6 +3054,44 @@ input:disabled {
 .stock-list .badge {
   font-size: 8px;
 }
+.stock-quantity-cell {
+  min-width: 44px;
+}
+.stock-quantity-trigger {
+  width: max-content;
+  min-width: 28px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--success);
+  background: transparent;
+  font-family: Manrope, Inter, sans-serif;
+  font-weight: 800;
+  text-align: left;
+  cursor: text;
+}
+.stock-quantity-trigger:hover {
+  background: #ecfdf3;
+}
+.stock-quantity-trigger.text-warning {
+  color: var(--warning);
+}
+.stock-quantity-trigger.text-warning:hover {
+  background: #fffbeb;
+}
+.stock-quantity-input {
+  width: 58px;
+  min-height: 34px;
+  padding: 0 7px;
+  border-color: var(--success);
+  border-radius: 8px;
+  font-family: Manrope, Inter, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+}
+.stock-quantity-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
 .stock-list .button {
   grid-column: 2 / -1;
   min-height: 36px;
@@ -3064,6 +3102,10 @@ input:disabled {
 .stock-list--selecting .button {
   color: #fff;
   background: var(--primary);
+}
+.stock-list .variant-note-button.has-note {
+  color: var(--primary);
+  background: #eff6ff;
 }
 .matrix-controls {
   margin-bottom: 12px;
@@ -4211,6 +4253,9 @@ input:disabled {
     grid-template-columns: repeat(4, 1fr);
   }
   .stock-list > .card {
+    grid-template-columns: 46px minmax(180px, 1fr) 70px 100px auto max-content;
+  }
+  .stock-list--selecting > .card {
     grid-template-columns: 46px minmax(180px, 1fr) 60px 100px auto max-content;
   }
   .stock-list .button {
