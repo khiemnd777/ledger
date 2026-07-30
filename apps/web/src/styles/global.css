@@ -2172,7 +2172,7 @@ input:disabled {
 }
 .product-card-art {
   width: 66px;
-  height: 72px;
+  aspect-ratio: 1;
   border-radius: 16px;
   color: #374151;
   background: linear-gradient(145deg, #eef1f4, #dfe4ea);
@@ -2218,7 +2218,8 @@ input:disabled {
   gap: 16px;
 }
 .product-hero-art {
-  height: 120px;
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: 20px;
   color: #334155;
   background: linear-gradient(145deg, #edf0f4, #d5dce5);
@@ -2574,7 +2575,7 @@ input:disabled {
 }
 .image-upload__previews figure {
   min-width: 0;
-  height: 130px;
+  aspect-ratio: 1;
   margin: 0;
   border: 1px solid var(--border);
   border-radius: 13px;
@@ -3642,7 +3643,7 @@ input:disabled {
 }
 .expense-icon {
   width: 40px;
-  height: 40px;
+  aspect-ratio: 1;
   border-radius: 12px;
   color: var(--warning);
   background: #fffbeb;
@@ -4210,7 +4211,7 @@ input:disabled {
     grid-template-columns: repeat(4, 1fr);
   }
   .stock-list > .card {
-    grid-template-columns: 46px minmax(180px, 1fr) 60px 100px auto 18px;
+    grid-template-columns: 46px minmax(180px, 1fr) 60px 100px auto max-content;
   }
   .stock-list .button {
     grid-column: auto;
@@ -4368,9 +4369,6 @@ input:disabled {
   }
   .product-detail__hero {
     grid-template-columns: 160px 1fr;
-  }
-  .product-hero-art {
-    height: 170px;
   }
   .variant-grid {
     grid-template-columns: repeat(3, 1fr);
