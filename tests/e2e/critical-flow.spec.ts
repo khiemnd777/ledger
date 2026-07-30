@@ -95,3 +95,19 @@ test("image picker rejects invalid files and previews a valid image", async ({ p
   await page.getByRole("button", { name: "Bỏ ảnh shirt.jpg" }).click();
   await expect(page.getByAltText("Xem trước shirt.jpg")).toHaveCount(0);
 });
+
+test("opening stock is entered independently for each product variant", async ({ page }) => {
+  await openDemoShop(page);
+  await page.goto("/products/new");
+
+  await page.getByRole("button", { name: "Giá trị" }).click();
+  await page.getByRole("textbox", { name: /^Màu/ }).fill("Đen");
+  await page.getByRole("textbox", { name: /^Size/ }).fill("M, L");
+  await page.getByRole("button", { name: "Tồn đầu" }).click();
+
+  await page.getByLabel("Tồn đầu Đen · M · Cổ tròn").fill("5");
+  await page.getByLabel("Tồn đầu Đen · L · Cổ tròn").fill("10");
+
+  await expect(page.getByText("Tổng số áo ban đầu").locator("..")).toContainText("15 áo");
+  await expect(page.getByText("Tồn dự kiến").locator("..")).toContainText("15 áo");
+});

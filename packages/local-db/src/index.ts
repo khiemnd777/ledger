@@ -195,6 +195,7 @@ export interface CreateProductInput {
   salePrice: number;
   purchasePrice: number;
   openingStock: number;
+  variantOpeningStocks?: number[];
   lowStockThreshold: number;
   imageIds?: string[];
   attributes: Array<{ name: string; values: Array<{ value: string; colorHex?: string }> }>;
@@ -261,8 +262,18 @@ export async function createProductWithVariants(input: CreateProductInput) {
     values.filter((value) => value.attributeId === attribute.id),
   );
   const combinations = groups.length > 0 ? cartesian(groups) : [[]];
+  if (input.variantOpeningStocks && input.variantOpeningStocks.length !== combinations.length)
+    throw new PocketError(
+      "INVALID_VARIANT_OPENING_STOCK",
+      "Số lượng tồn đầu không khớp với danh sách biến thể.",
+      "Kiểm tra lại số lượng của từng biến thể.",
+    );
+  input.variantOpeningStocks?.forEach((quantity, index) => {
+    assertIntegerMoney(quantity, `variantOpeningStocks[${index}]`);
+  });
   const variants = combinations.map((combination, index): ProductVariant => {
     const id = createId();
+    const openingStock = input.variantOpeningStocks?.[index] ?? input.openingStock;
     return {
       ...createMeta(input.shopId, input.deviceId, id),
       productId: product.id,
@@ -272,22 +283,22 @@ export async function createProductWithVariants(input: CreateProductInput) {
       attributeSummary: combination.map((value) => value.displayValue).join(" · ") || "Mặc định",
       purchasePrice: input.purchasePrice,
       salePrice: input.salePrice,
-      stockQuantity: input.openingStock,
+      stockQuantity: openingStock,
       reservedQuantity: 0,
       lowStockThreshold: input.lowStockThreshold,
       active: true,
     };
   });
   const movements = variants
-    .filter(() => input.openingStock !== 0)
+    .filter((variant) => variant.stockQuantity !== 0)
     .map(
       (variant): StockMovement => ({
         ...createMeta(input.shopId, input.deviceId),
         variantId: variant.id,
         movementType: "opening_stock",
-        quantityDelta: input.openingStock,
+        quantityDelta: variant.stockQuantity,
         quantityBefore: 0,
-        quantityAfter: input.openingStock,
+        quantityAfter: variant.stockQuantity,
         unitCost: input.purchasePrice,
         referenceType: "opening",
         referenceId: product.id,

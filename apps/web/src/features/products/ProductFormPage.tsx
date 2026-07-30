@@ -35,7 +35,6 @@ const schema = z.object({
   neck: z.string().min(1),
   purchasePrice: z.number().int().nonnegative(),
   salePrice: z.number().int().positive(),
-  openingStock: z.number().int().nonnegative(),
   lowStockThreshold: z.number().int().nonnegative(),
 });
 type Values = z.infer<typeof schema>;
@@ -60,6 +59,7 @@ export default function ProductFormPage() {
   const [error, setError] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imageProgress, setImageProgress] = useState(0);
+  const [variantOpeningStocks, setVariantOpeningStocks] = useState<Record<string, string>>({});
   const {
     register,
     watch,
@@ -75,7 +75,6 @@ export default function ProductFormPage() {
       neck: "Cổ tròn",
       purchasePrice: 82000,
       salePrice: 189000,
-      openingStock: 5,
       lowStockThreshold: 3,
     },
   });
@@ -92,13 +91,34 @@ export default function ProductFormPage() {
     .split(",")
     .map((v) => v.trim())
     .filter(Boolean);
-  const variantCount = colors.length * sizes.length * necks.length;
+  const variantRows = colors.flatMap((color) =>
+    sizes.flatMap((size) =>
+      necks.map((neck) => ({
+        key: JSON.stringify([color, size, neck]),
+        name: `${color} · ${size} · ${neck}`,
+      })),
+    ),
+  );
+  const variantCount = variantRows.length;
+  const openingStocks = variantRows.map(({ key }) => {
+    const rawValue = variantOpeningStocks[key];
+    return rawValue === undefined || rawValue === "" ? 0 : Number(rawValue);
+  });
+  const totalOpeningStock = openingStocks.reduce(
+    (total, quantity) => total + (Number.isFinite(quantity) ? quantity : 0),
+    0,
+  );
   async function finish() {
     if (!activeShop || busy) return;
     const parsed = schema.safeParse(getValues());
     if (!parsed.success) {
       setError("Kiểm tra lại thông tin bắt buộc và giá bán.");
       setStep(0);
+      return;
+    }
+    if (openingStocks.some((quantity) => !Number.isSafeInteger(quantity) || quantity < 0)) {
+      setError("Tồn đầu của mỗi biến thể phải là số nguyên không âm.");
+      setStep(6);
       return;
     }
     setError("");
@@ -131,7 +151,8 @@ export default function ProductFormPage() {
         material: parsed.data.material,
         purchasePrice: parsed.data.purchasePrice,
         salePrice: parsed.data.salePrice,
-        openingStock: parsed.data.openingStock,
+        openingStock: 0,
+        variantOpeningStocks: openingStocks,
         lowStockThreshold: parsed.data.lowStockThreshold,
         imageIds: [...new Set(uploadedPaths)],
         attributes: [
@@ -292,9 +313,7 @@ export default function ProductFormPage() {
                 </div>
                 {colors
                   .flatMap((color) =>
-                    sizes.flatMap((size) =>
-                      necks.map((neck, _index) => `${color} · ${size} · ${neck}`),
-                    ),
+                    sizes.flatMap((size) => necks.map((neck) => `${color} · ${size} · ${neck}`)),
                   )
                   .slice(0, 12)
                   .map((name, index) => (
@@ -334,12 +353,34 @@ export default function ProductFormPage() {
           {step === 6 && (
             <section>
               <h2>Tồn kho đầu kỳ</h2>
-              <p>Số lượng này áp dụng cho mỗi biến thể và tạo lịch sử nhập kho đầu kỳ.</p>
-              <Card className="form-card form-grid">
-                <label>
-                  Tồn mỗi biến thể
-                  <input type="number" {...register("openingStock", { valueAsNumber: true })} />
-                </label>
+              <p>Nhập số lượng riêng cho từng size, màu và kiểu cổ.</p>
+              <Card className="opening-stock-card">
+                <div className="opening-stock-card__head">
+                  <span>Biến thể</span>
+                  <span className="opening-stock-card__quantity">Số lượng</span>
+                </div>
+                {variantRows.map((variant) => (
+                  <label key={variant.key}>
+                    <span>{variant.name}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      placeholder="0"
+                      aria-label={`Tồn đầu ${variant.name}`}
+                      value={variantOpeningStocks[variant.key] ?? ""}
+                      onChange={(event) =>
+                        setVariantOpeningStocks((current) => ({
+                          ...current,
+                          [variant.key]: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </Card>
+              <Card className="form-card form-grid opening-stock-settings">
                 <label>
                   Ngưỡng sắp hết
                   <input
@@ -349,9 +390,10 @@ export default function ProductFormPage() {
                 </label>
                 <div className="price-margin">
                   <span>Tổng số áo ban đầu</span>
-                  <strong>{variantCount * values.openingStock} áo</strong>
+                  <strong>{totalOpeningStock} áo</strong>
                 </div>
               </Card>
+              {error && <p className="form-error">{error}</p>}
             </section>
           )}
           {step === 7 && (
@@ -391,7 +433,7 @@ export default function ProductFormPage() {
                     </div>
                     <div>
                       <dt>Kho ban đầu</dt>
-                      <dd>{variantCount * values.openingStock} áo</dd>
+                      <dd>{totalOpeningStock} áo</dd>
                     </div>
                     <div>
                       <dt>Giá bán</dt>
@@ -428,7 +470,7 @@ export default function ProductFormPage() {
           </div>
           <div>
             <span>Tồn dự kiến</span>
-            <b>{variantCount * values.openingStock} áo</b>
+            <b>{totalOpeningStock} áo</b>
           </div>
         </aside>
       </div>

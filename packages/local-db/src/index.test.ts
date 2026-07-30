@@ -54,6 +54,38 @@ async function fixture() {
   return { shop, product, variant };
 }
 
+describe("product variants", () => {
+  it("creates independent opening stock and ledger movements for each variant", async () => {
+    const shop = await createShop({
+      ownerUid: "user-a",
+      name: "Shop test",
+      allowNegativeStock: false,
+      defaultLowStockThreshold: 2,
+      deviceId,
+    });
+    const result = await createProductWithVariants({
+      shopId: shop.id,
+      deviceId,
+      name: "Áo size riêng",
+      productCode: "SIZE",
+      purchasePrice: 100000,
+      salePrice: 200000,
+      openingStock: 0,
+      variantOpeningStocks: [5, 10],
+      lowStockThreshold: 2,
+      attributes: [{ name: "Size", values: [{ value: "M" }, { value: "L" }] }],
+    });
+
+    expect(result.variants.map((variant) => variant.stockQuantity)).toEqual([5, 10]);
+    const movements = await db.stockMovements
+      .where("referenceId")
+      .equals(result.product.id)
+      .toArray();
+    expect(movements.map((movement) => movement.quantityDelta)).toEqual([5, 10]);
+    expect(movements.map((movement) => movement.quantityAfter)).toEqual([5, 10]);
+  });
+});
+
 describe("atomic sale completion", () => {
   it("writes sale, exact line, stock ledger, payment, audit and outbox atomically", async () => {
     const { shop, variant } = await fixture();
