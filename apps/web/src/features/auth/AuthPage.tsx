@@ -6,7 +6,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../../app/AuthContext";
 import { toVietnameseError } from "../../app/format";
-import { Field } from "../../components/Ui";
+import { Field, PoweredBy } from "../../components/Ui";
 
 const schema = z.object({
   email: z.string().email("Email chưa đúng định dạng"),
@@ -209,6 +209,7 @@ export default function AuthPage() {
         <p className="auth-terms">
           Bằng cách tiếp tục, bạn đồng ý bảo vệ thông tin bán hàng và khách hàng của mình.
         </p>
+        <PoweredBy className="powered-by--auth" />
       </main>
     </div>
   );

@@ -3,6 +3,16 @@ import { ChevronLeft, Search, Shirt } from "lucide-react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
+export function PoweredBy({ className = "" }: { className?: string }) {
+  return (
+    <p className={`powered-by ${className}`.trim()}>
+      <a href="https://www.knasoftware.com" target="_blank" rel="noreferrer">
+        POWERED BY <strong>KNASOFTWARE.COM</strong>
+      </a>
+    </p>
+  );
+}
+
 export function PageHeader({
   title,
   eyebrow,

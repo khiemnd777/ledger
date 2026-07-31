@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { PoweredBy } from "../components/Ui";
 import { useAuth } from "./AuthContext";
 import { useShop } from "./ShopContext";
 
@@ -96,6 +97,7 @@ export default function AppShell() {
           <span className={pending ? "status-dot status-dot--warning" : "status-dot"} />
           {pending ? `${pending} mục chờ đồng bộ` : "Đã lưu trên thiết bị"}
         </div>
+        <PoweredBy className="powered-by--sidebar" />
       </aside>
       <div className="app-main">
         {!scannerOpen && (

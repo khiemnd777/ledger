@@ -15,7 +15,7 @@ import {
   Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { PageHeader } from "../../components/Ui";
+import { PageHeader, PoweredBy } from "../../components/Ui";
 
 const groups = [
   {
@@ -89,6 +89,7 @@ export default function MorePage() {
           </p>
         </div>
       </Card>
+      <PoweredBy className="powered-by--more" />
     </div>
   );
 }

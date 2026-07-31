@@ -694,6 +694,30 @@ input:disabled {
   font-size: 10px;
   line-height: 1.5;
 }
+.powered-by {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+.powered-by a {
+  display: inline-block;
+  padding: 6px;
+  border-radius: 7px;
+  transition: color 0.15s ease;
+}
+.powered-by a:hover {
+  color: var(--primary);
+}
+.powered-by strong {
+  font-family: inherit;
+  font-weight: 800;
+}
+.powered-by--auth {
+  margin-top: 8px;
+}
 .local-mode {
   padding: 25px;
   border: 1px solid var(--border);
@@ -3836,6 +3860,9 @@ input:disabled {
   font-size: 10px;
   line-height: 1.5;
 }
+.powered-by--more {
+  margin-top: 18px;
+}
 .settings-layout {
   display: grid;
   gap: 15px;
@@ -4365,6 +4392,17 @@ input:disabled {
     align-items: center;
     gap: 7px;
     font-size: 9px;
+  }
+  .powered-by--sidebar {
+    padding: 0 6px 2px;
+    color: #718096;
+    font-size: 8px;
+  }
+  .powered-by--sidebar a:hover {
+    color: #fff;
+  }
+  .powered-by--more {
+    display: none;
   }
   .status-dot {
     width: 8px;
