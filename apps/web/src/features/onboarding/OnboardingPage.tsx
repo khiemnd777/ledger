@@ -206,7 +206,7 @@ export default function OnboardingPage() {
               </i>
               <span>
                 <strong>Dùng dữ liệu mẫu</strong>
-                <small>3 mẫu áo, 42 biến thể, đơn hàng và công nợ</small>
+                <small>3 mẫu áo, 42 size, đơn hàng và công nợ</small>
               </span>
               <Check />
             </button>

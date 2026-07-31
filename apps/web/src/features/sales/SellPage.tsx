@@ -135,7 +135,7 @@ export default function SellPage() {
         <div className="sell-layout">
           <section>
             <div className="cart-heading">
-              <h2>{items.length} biến thể trong đơn</h2>
+              <h2>{items.length} size trong đơn</h2>
               <div className="cart-heading__actions">
                 <Link to="/inventory?mode=select">
                   <Boxes /> Chọn từ kho

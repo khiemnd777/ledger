@@ -4,13 +4,13 @@ Mọi entity business có `id`, `shopId`, created/updated timestamps, device IDs
 
 ## Catalog
 
-`Product` là mẫu áo. `ProductAttribute` và `ProductAttributeValue` mô tả Size, Màu, Kiểu cổ… `ProductVariant` là đơn vị bán và tồn độc lập, luôn có SKU, QR, giá, tồn và ngưỡng sắp hết; ghi chú tùy chọn trên biến thể được dùng để cảnh báo khi chọn đúng áo để bán.
+`Product` là mẫu áo. `ProductAttribute` và `ProductAttributeValue` mô tả Size, Màu, Kiểu cổ… `ProductVariant` (hiển thị là Size) là đơn vị bán và tồn độc lập, luôn có SKU, QR, giá, tồn và ngưỡng sắp hết; ghi chú tùy chọn trên từng size được dùng để cảnh báo khi chọn đúng áo để bán.
 
 ## Giao dịch
 
 - `Sale` + `SaleLine`: snapshot tên, SKU, giá bán và giá vốn tại lúc hoàn tất.
 - `Purchase` + `PurchaseLine`: đợt nhập áo, giá nhập và công nợ xưởng.
-- `ReturnExchange`: lý do, restock, biến thể thay thế, thu thêm/hoàn tiền.
+- `ReturnExchange`: lý do, restock, size thay thế, thu thêm/hoàn tiền.
 - `Payment`: dòng tiền incoming/outgoing gắn reference.
 - `Expense`: chi phí vận hành shop.
 

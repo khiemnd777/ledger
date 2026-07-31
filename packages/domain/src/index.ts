@@ -321,7 +321,7 @@ export class InsufficientStockError extends PocketError {
   ) {
     super(
       "INSUFFICIENT_STOCK",
-      `Biến thể chỉ còn ${available} sản phẩm, không đủ để bán ${requested}.`,
+      `Size chỉ còn ${available} sản phẩm, không đủ để bán ${requested}.`,
       "Giảm số lượng hoặc nhập thêm áo.",
       { variantId, available, requested },
     );

@@ -2,7 +2,7 @@
 
 **Quản lý bán áo bằng QR ngay trên điện thoại.**
 
-SỔ TAY là PWA mobile-first cho shop thời trang nhỏ: quản lý mẫu áo và biến thể, in/quét QR, bán hàng, nhập áo, đổi trả, công nợ, chi phí và báo cáo. Ứng dụng làm việc trên IndexedDB khi offline và đồng bộ các changeset bất biến lên Firebase Realtime Database khi có mạng.
+SỔ TAY là PWA mobile-first cho shop thời trang nhỏ: quản lý mẫu áo và size, in/quét QR, bán hàng, nhập áo, đổi trả, công nợ, chi phí và báo cáo. Ứng dụng làm việc trên IndexedDB khi offline và đồng bộ các changeset bất biến lên Firebase Realtime Database khi có mạng.
 
 CRUD được triển khai theo nguyên tắc sổ cái: mẫu áo, khách, xưởng và chi phí có thể sửa, tạm ẩn/hủy rồi khôi phục; đơn bán và phiếu nhập chỉ cho sửa metadata không làm đổi số tiền. Khi hủy giao dịch đã hoàn tất, ứng dụng tạo phát sinh kho, công nợ và thanh toán đảo chiều thay vì xóa lịch sử. Điều chỉnh tồn luôn cần lý do và tạo `StockMovement`.
 

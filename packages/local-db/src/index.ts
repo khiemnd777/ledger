@@ -265,8 +265,8 @@ export async function createProductWithVariants(input: CreateProductInput) {
   if (input.variantOpeningStocks && input.variantOpeningStocks.length !== combinations.length)
     throw new PocketError(
       "INVALID_VARIANT_OPENING_STOCK",
-      "Số lượng tồn đầu không khớp với danh sách biến thể.",
-      "Kiểm tra lại số lượng của từng biến thể.",
+      "Số lượng tồn đầu không khớp với danh sách size.",
+      "Kiểm tra lại số lượng của từng size.",
     );
   input.variantOpeningStocks?.forEach((quantity, index) => {
     assertIntegerMoney(quantity, `variantOpeningStocks[${index}]`);
@@ -398,7 +398,7 @@ export async function updateProduct(input: UpdateProductInput) {
       if (!variant || variant.shopId !== input.shopId)
         throw new PocketError(
           "VARIANT_MISSING",
-          "Một biến thể không còn tồn tại.",
+          "Một size không còn tồn tại.",
           "Tải lại mẫu áo rồi thử lại.",
         );
       const deletedAt = change.active ? undefined : (variant.deletedAt ?? nowIso());
@@ -453,7 +453,7 @@ export async function updateVariantNote(input: {
     if (!variant || variant.shopId !== input.shopId)
       throw new PocketError(
         "VARIANT_MISSING",
-        "Không tìm thấy biến thể cần ghi chú.",
+        "Không tìm thấy size cần ghi chú.",
         "Tải lại kho rồi thử lại.",
       );
     const note = input.note?.trim() || undefined;
@@ -518,7 +518,7 @@ export async function resolveVariant(shopId: string, lookup: string): Promise<Pr
   if (!variant)
     throw new PocketError(
       "VARIANT_MISSING",
-      "Không tìm thấy biến thể áo.",
+      "Không tìm thấy size áo.",
       "Kiểm tra QR hoặc nhập lại SKU.",
     );
   if (variant.shopId !== shopId)
@@ -530,8 +530,8 @@ export async function resolveVariant(shopId: string, lookup: string): Promise<Pr
   if (!variant.active)
     throw new PocketError(
       "VARIANT_INACTIVE",
-      "Biến thể này đã ngừng bán.",
-      "Mở biến thể khác hoặc kích hoạt lại trong kho.",
+      "Size này đã ngừng bán.",
+      "Mở size khác hoặc kích hoạt lại trong kho.",
     );
   const product = await db.products.get(variant.productId);
   if (!product?.active)
@@ -630,7 +630,7 @@ export async function completeSale(input: CompleteSaleInput, options: CompleteSa
         if (!variant || variant.shopId !== input.shopId || !variant.active || !product?.active) {
           throw new PocketError(
             "VARIANT_MISSING",
-            "Một biến thể trong giỏ không còn khả dụng.",
+            "Một size trong giỏ không còn khả dụng.",
             "Xóa sản phẩm lỗi và quét lại.",
           );
         }
@@ -774,7 +774,7 @@ export async function receiveStock(input: ReceiveStockInput) {
     throw new PocketError(
       "EMPTY_PURCHASE",
       "Phiếu nhập chưa có số lượng.",
-      "Nhập số lượng cho ít nhất một biến thể.",
+      "Nhập số lượng cho ít nhất một size.",
     );
   assertIntegerMoney(input.amountPaid, "amountPaid");
   for (const line of input.lines) {
@@ -821,11 +821,7 @@ export async function receiveStock(input: ReceiveStockInput) {
       for (const lineInput of input.lines.filter((line) => line.quantity > 0)) {
         const variant = await db.variants.get(lineInput.variantId);
         if (!variant || variant.shopId !== input.shopId)
-          throw new PocketError(
-            "VARIANT_MISSING",
-            "Không tìm thấy biến thể nhập kho.",
-            "Chọn lại áo.",
-          );
+          throw new PocketError("VARIANT_MISSING", "Không tìm thấy size nhập kho.", "Chọn lại áo.");
         const line: PurchaseLine = {
           ...createMeta(input.shopId, input.deviceId),
           purchaseId: purchase.id,
@@ -1050,7 +1046,7 @@ export async function cancelCompletedPurchase(
         if (!variant || variant.shopId !== shopId)
           throw new PocketError(
             "VARIANT_MISSING",
-            "Thiếu biến thể để hoàn tác phiếu nhập.",
+            "Thiếu size để hoàn tác phiếu nhập.",
             "Đồng bộ dữ liệu rồi thử lại.",
           );
         if (!shop.allowNegativeStock && variant.stockQuantity < line.quantity)
@@ -1170,7 +1166,7 @@ export async function cancelCompletedSale(shopId: string, deviceId: string, sale
         if (!variant)
           throw new PocketError(
             "VARIANT_MISSING",
-            "Thiếu biến thể để hoàn tồn.",
+            "Thiếu size để hoàn tồn.",
             "Đồng bộ dữ liệu rồi thử lại.",
           );
         const updated = touch(
@@ -1862,7 +1858,7 @@ export async function adjustStock(input: {
       if (!shop || !variant || variant.shopId !== input.shopId)
         throw new PocketError(
           "VARIANT_MISSING",
-          "Không tìm thấy biến thể cần điều chỉnh.",
+          "Không tìm thấy size cần điều chỉnh.",
           "Tải lại kho rồi thử lại.",
         );
       const after = variant.stockQuantity + input.quantityDelta;

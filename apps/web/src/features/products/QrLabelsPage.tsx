@@ -57,7 +57,7 @@ export default function QrLabelsPage() {
     <div className={`labels-page labels-page--${layout}`}>
       <PageHeader
         title="Tem QR"
-        eyebrow={`${selected.length} BIẾN THỂ ĐÃ CHỌN`}
+        eyebrow={`${selected.length} SIZE ĐÃ CHỌN`}
         back
         action={
           <Button disabled={!readyToPrint} onClick={() => window.print()}>
@@ -101,8 +101,8 @@ export default function QrLabelsPage() {
         <div>
           <strong>In trực tiếp bằng máy in hệ thống</strong>
           <p>
-            QR được sinh tự động cho từng biến thể. Trên iPhone, chọn máy in AirPrint; trên máy
-            tính, chọn máy in thường hoặc máy in nhiệt 50 × 30 mm trong hộp thoại in.
+            QR được sinh tự động cho từng size. Trên iPhone, chọn máy in AirPrint; trên máy tính,
+            chọn máy in thường hoặc máy in nhiệt 50 × 30 mm trong hộp thoại in.
           </p>
         </div>
       </Card>

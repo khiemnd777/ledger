@@ -213,7 +213,7 @@ export default function InventoryPage() {
     <div>
       <PageHeader
         title={selectionMode ? "Chọn áo vào đơn" : "Kho áo"}
-        eyebrow={selectionMode ? "CHỌN BIẾN THỂ TỪ KHO" : "TỒN KHO THEO BIẾN THỂ"}
+        eyebrow={selectionMode ? "CHỌN SIZE TỪ KHO" : "TỒN KHO THEO SIZE"}
         action={
           selectionMode ? (
             <Link className="button button--primary compact-button" to="/sell">
@@ -251,7 +251,7 @@ export default function InventoryPage() {
             </span>
             <div>
               <small>Sắp hết</small>
-              <strong>{low} biến thể</strong>
+              <strong>{low} size</strong>
             </div>
           </Card>
           <Card>
@@ -260,7 +260,7 @@ export default function InventoryPage() {
             </span>
             <div>
               <small>Hết hàng</small>
-              <strong>{out} biến thể</strong>
+              <strong>{out} size</strong>
             </div>
           </Card>
           <Card>
@@ -565,7 +565,7 @@ export default function InventoryPage() {
             <CheckCircle2 />
             <div>
               <h2>Đối chiếu tồn kho</h2>
-              <p>So sánh tồn cache của biến thể với tổng phát sinh trong sổ kho.</p>
+              <p>So sánh tồn cache của size với tổng phát sinh trong sổ kho.</p>
             </div>
             <Button variant="secondary" onClick={runCheck}>
               <RefreshCw />
@@ -577,7 +577,7 @@ export default function InventoryPage() {
               <CheckCircle2 />
               <div>
                 <h3>Dữ liệu kho nhất quán</h3>
-                <p>{checks?.length ?? 0} biến thể khớp với lịch sử kho.</p>
+                <p>{checks?.length ?? 0} size khớp với lịch sử kho.</p>
               </div>
             </Card>
           ) : (
@@ -630,7 +630,7 @@ export default function InventoryPage() {
                   placeholder="VD: Áo bán cho khách A"
                   disabled={noteBusy}
                 />
-                <small>Ghi chú sẽ được báo khi biến thể này được chọn bán.</small>
+                <small>Ghi chú sẽ được báo khi size này được chọn bán.</small>
               </label>
             </div>
             {noteError && (

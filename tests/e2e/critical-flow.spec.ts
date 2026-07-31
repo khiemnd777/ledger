@@ -50,7 +50,7 @@ test("choosing a variant from inventory adds it to the sale", async ({ page }) =
   await expect(page.getByRole("link", { name: "Xem đơn (1)" })).toBeVisible();
 
   await page.getByRole("link", { name: "Xem đơn (1)" }).click();
-  await expect(page.getByRole("heading", { name: "1 biến thể trong đơn" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "1 size trong đơn" })).toBeVisible();
 });
 
 test("stock quantity can be edited directly from an inventory row", async ({ page }) => {

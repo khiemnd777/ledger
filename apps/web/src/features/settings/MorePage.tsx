@@ -29,7 +29,7 @@ const groups = [
   {
     title: "Hàng hóa",
     items: [
-      { to: "/products", label: "Mẫu áo", hint: "Biến thể và giá bán", icon: Shirt },
+      { to: "/products", label: "Mẫu áo", hint: "Size và giá bán", icon: Shirt },
       { to: "/purchases", label: "Phiếu nhập", hint: "Sửa, hủy và đối soát", icon: ReceiptText },
       { to: "/qr-labels", label: "Tem QR", hint: "In A4 hoặc máy in nhiệt", icon: QrCode },
       {

@@ -71,7 +71,7 @@ export default function AuthPage() {
           <li>
             <ScanLine />
             <span>
-              <strong>Quét đúng biến thể</strong>
+              <strong>Quét đúng size</strong>
               <small>Size, màu, kiểu cổ — không xuất nhầm</small>
             </span>
           </li>

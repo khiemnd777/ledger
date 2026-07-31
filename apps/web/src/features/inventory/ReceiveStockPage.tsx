@@ -59,7 +59,7 @@ export default function ReceiveStockPage() {
   const total = lines.reduce((sum, line) => sum + line.quantity * line.unitCost, 0);
   async function submit() {
     if (!activeShop || lines.length === 0) {
-      setError("Nhập số lượng cho ít nhất một biến thể.");
+      setError("Nhập số lượng cho ít nhất một size.");
       return;
     }
     setBusy(true);
@@ -182,7 +182,7 @@ export default function ReceiveStockPage() {
           <Card className="receive-summary">
             <h2>Tổng đợt nhập</h2>
             <div>
-              <span>Số biến thể</span>
+              <span>Số size</span>
               <b>{lines.length}</b>
             </div>
             <div>

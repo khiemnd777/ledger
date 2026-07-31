@@ -43,7 +43,7 @@ const steps = [
   { label: "Hình ảnh", icon: ImagePlus },
   { label: "Thuộc tính", icon: Tags },
   { label: "Giá trị", icon: Palette },
-  { label: "Biến thể", icon: Sparkles },
+  { label: "Size", icon: Sparkles },
   { label: "Giá bán", icon: CircleDollarSign },
   { label: "Tồn đầu", icon: PackageCheck },
   { label: "Tem QR", icon: QrCode },
@@ -117,7 +117,7 @@ export default function ProductFormPage() {
       return;
     }
     if (openingStocks.some((quantity) => !Number.isSafeInteger(quantity) || quantity < 0)) {
-      setError("Tồn đầu của mỗi biến thể phải là số nguyên không âm.");
+      setError("Tồn đầu của mỗi size phải là số nguyên không âm.");
       setStep(6);
       return;
     }
@@ -161,7 +161,7 @@ export default function ProductFormPage() {
           { name: "Kiểu cổ", values: necks.map((value) => ({ value })) },
         ],
       });
-      show(`Đã tạo ${variantCount} biến thể và QR riêng`);
+      show(`Đã tạo ${variantCount} size và QR riêng`);
       navigate(`/products/${result.product.id}`);
     } catch (cause) {
       if (user && hasFirebaseConfig())
@@ -250,7 +250,7 @@ export default function ProductFormPage() {
           {step === 2 && (
             <section>
               <h2>Thuộc tính bán áo</h2>
-              <p>SỔ TAY tạo một biến thể riêng cho mỗi tổ hợp.</p>
+              <p>SỔ TAY tạo một size riêng cho mỗi tổ hợp.</p>
               <div className="attribute-cards">
                 <Card>
                   <Palette />
@@ -304,11 +304,11 @@ export default function ProductFormPage() {
           )}
           {step === 4 && (
             <section>
-              <h2>Kiểm tra biến thể</h2>
-              <p>Hệ thống sẽ tạo {variantCount} biến thể độc lập.</p>
+              <h2>Kiểm tra size</h2>
+              <p>Hệ thống sẽ tạo {variantCount} size độc lập.</p>
               <Card className="variant-preview">
                 <div className="variant-preview__head">
-                  <span>Tên biến thể</span>
+                  <span>Tên size</span>
                   <span>SKU dự kiến</span>
                 </div>
                 {colors
@@ -324,14 +324,14 @@ export default function ProductFormPage() {
                       </code>
                     </div>
                   ))}
-                {variantCount > 12 && <p>+ {variantCount - 12} biến thể khác</p>}
+                {variantCount > 12 && <p>+ {variantCount - 12} size khác</p>}
               </Card>
             </section>
           )}
           {step === 5 && (
             <section>
               <h2>Giá nhập & giá bán</h2>
-              <p>Áp dụng ban đầu cho mọi biến thể; có thể sửa riêng sau.</p>
+              <p>Áp dụng ban đầu cho mọi size; có thể sửa riêng sau.</p>
               <Card className="form-card form-grid">
                 <label>
                   Giá nhập
@@ -356,7 +356,7 @@ export default function ProductFormPage() {
               <p>Nhập số lượng riêng cho từng size, màu và kiểu cổ.</p>
               <Card className="opening-stock-card">
                 <div className="opening-stock-card__head">
-                  <span>Biến thể</span>
+                  <span>Size</span>
                   <span className="opening-stock-card__quantity">Số lượng</span>
                 </div>
                 {variantRows.map((variant) => (
@@ -398,15 +398,15 @@ export default function ProductFormPage() {
           )}
           {step === 7 && (
             <section>
-              <h2>Tem QR theo biến thể</h2>
+              <h2>Tem QR theo size</h2>
               <p>Mỗi size, màu và kiểu cổ sẽ có QR riêng.</p>
               <Card className="qr-explainer">
                 <QrCode />
                 <div>
                   <strong>{variantCount} mã QR sẽ được tạo</strong>
                   <p>
-                    Mã chỉ chứa phiên bản, ID biến thể và checksum — không chứa giá, tồn kho hay dữ
-                    liệu riêng tư.
+                    Mã chỉ chứa phiên bản, ID size và checksum — không chứa giá, tồn kho hay dữ liệu
+                    riêng tư.
                   </p>
                   <code>PKT1:variant-id:7A42</code>
                 </div>
@@ -428,7 +428,7 @@ export default function ProductFormPage() {
                   </p>
                   <dl>
                     <div>
-                      <dt>Biến thể</dt>
+                      <dt>Size</dt>
                       <dd>{variantCount}</dd>
                     </div>
                     <div>
@@ -461,7 +461,7 @@ export default function ProductFormPage() {
             <b>{colors.length + sizes.length + necks.length} giá trị</b>
           </div>
           <div>
-            <span>Biến thể</span>
+            <span>Size</span>
             <b>{variantCount}</b>
           </div>
           <div>

@@ -119,7 +119,7 @@ export default function ProductsPage() {
         const removed = currentProduct.imageIds.filter((path) => !nextImageIds.includes(path));
         if (user && hasFirebaseConfig() && removed.length)
           await Promise.allSettled(removed.map((path) => deleteCloudFile(user.uid, path)));
-        show("Đã cập nhật mẫu áo và biến thể");
+        show("Đã cập nhật mẫu áo và size");
         setEditing(false);
       } catch (cause) {
         if (user && hasFirebaseConfig())
@@ -139,7 +139,7 @@ export default function ProductsPage() {
       const next = !currentProduct.active;
       if (
         !next &&
-        !window.confirm("Tạm ẩn mẫu áo và toàn bộ biến thể? Lịch sử bán/nhập vẫn được giữ nguyên.")
+        !window.confirm("Tạm ẩn mẫu áo và toàn bộ size? Lịch sử bán/nhập vẫn được giữ nguyên.")
       )
         return;
       try {
@@ -172,9 +172,7 @@ export default function ProductsPage() {
               />
             </span>
             <div>
-              <p>
-                {product.description || `${product.material || "Mẫu áo"} · ${own.length} biến thể`}
-              </p>
+              <p>{product.description || `${product.material || "Mẫu áo"} · ${own.length} size`}</p>
               <div>
                 <span>
                   <small>Tổng tồn</small>
@@ -196,8 +194,8 @@ export default function ProductsPage() {
           <section>
             <div className="section-title">
               <div>
-                <h2>Biến thể áo</h2>
-                <p>Mỗi biến thể có SKU, QR và tồn riêng</p>
+                <h2>Size áo</h2>
+                <p>Mỗi size có SKU, QR và tồn riêng</p>
               </div>
               <div className="crud-actions">
                 <Button variant="secondary" onClick={() => openEditor(product, own)}>
@@ -276,7 +274,7 @@ export default function ProductsPage() {
                 <X />
               </button>
               <h2>Sửa mẫu áo</h2>
-              <p>Giá, ngưỡng cảnh báo và trạng thái được lưu riêng cho từng biến thể.</p>
+              <p>Giá, ngưỡng cảnh báo và trạng thái được lưu riêng cho từng size.</p>
               <div className="form-card form-grid">
                 <label>
                   Tên mẫu áo
@@ -459,7 +457,7 @@ export default function ProductsPage() {
                     <small>
                       {product.productCode} · {product.material || "Chưa có chất liệu"}
                     </small>
-                    <small>{own.length} biến thể</small>
+                    <small>{own.length} size</small>
                   </span>
                   <span>
                     <b>{stock} áo</b>
@@ -475,7 +473,7 @@ export default function ProductsPage() {
       ) : (
         <EmptyState
           title="Chưa có mẫu áo"
-          description="Tạo mẫu áo, các biến thể size/màu và tem QR đầu tiên."
+          description="Tạo mẫu áo, các lựa chọn size/màu và tem QR đầu tiên."
           action={
             <Link className="button button--primary" to="/products/new">
               <CirclePlus />

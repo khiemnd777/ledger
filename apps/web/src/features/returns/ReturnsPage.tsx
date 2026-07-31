@@ -238,7 +238,7 @@ export default function ReturnsPage() {
                 value={replacementId}
                 onChange={(e) => setReplacementId(e.target.value)}
               >
-                <option value="">Chọn biến thể thay thế</option>
+                <option value="">Chọn size thay thế</option>
                 {data.variants
                   .filter((v) => v.active && v.stockQuantity > 0 && v.id !== line.variantId)
                   .map((variant) => (

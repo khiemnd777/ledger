@@ -47,7 +47,7 @@ export function parseQrPayload(raw: string): ParsedQrPayload {
   if (!variantId || !/^[0-9a-z-]{8,}$/i.test(variantId)) {
     throw new PocketError(
       "INVALID_QR",
-      "Mã biến thể trong QR không hợp lệ.",
+      "Mã size trong QR không hợp lệ.",
       "Quét lại tem đúng của sản phẩm.",
     );
   }
